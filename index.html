@@ -40,7 +40,7 @@
     <meta name="og:description"
         content="Wordle Helper will help players gain an advantage to find the wordle puzzle answer with word suggestions. The word list contains all the possible words that can be answers to the Wordle puzzles. The word list can filter by entering information from Wordle about which letters are correct and incorrect.">
     <meta name="og:image" content="https://vineethtrv.github.io/wordle-helper/images/wordle-helper.png">
-    <meta name="og:url" content="https://vineethtrv.github.io/wordle-helper/">
+    <meta name="og:url" content="https://onionviolet.github.io/wordle-helper/">
     <meta name="fb:admins" content="vinithtrv">
     <meta name="og:type" content="website">
 
@@ -79,51 +79,42 @@
 
     <main>
 
-        <form>
-
+        <form id="board" autocomplete="off" onsubmit="return false">
             <div class="form-group">
-                <h1>
-                    Find the Wordle
-                </h1>
-                <p>This filters will help you to narrow down to the wordle answer</p>
+                <h1>Find the Wordle</h1>
+                <p>Enter each guess, then tap its tiles until the colors match the game. Repeated letters work the way Wordle scores them.</p>
             </div>
 
-
-            <!-- Correct -->
             <div class="form-group">
-                <label>Correct <span> (Letters in correct position) </span> </label>
-                
-                <div class="form-flex" id="form-correct">
-                    <input type="text" data-index="0">
-                    <input type="text" data-index="1">
-                    <input type="text" data-index="2">
-                    <input type="text" data-index="3">
-                    <input type="text" data-index="4">
+                <label for="guess-input">Add a guess <span>(press Enter, or tap a suggested word)</span></label>
+                <div class="form-flex">
+                    <input id="guess-input" maxlength="5" placeholder="Type a guess...">
+                    <button type="button" id="add-guess">Add</button>
                 </div>
-
-            </div>
-            
-            <!-- Present -->
-            <div class="form-group">
-                <label>Present <span> (Letters anywhere in word but not in correct position) </span> </label>
-                <input id="input-present" autocomplete="off" type="text" placeholder="Type present letters....">
-            </div>
-            
-            <!-- Absent -->
-            <div class="form-group">
-                <label>Absent <span> (Letters can be excluded from the word) </span> </label>
-                <input id="input-absent" autocomplete="off"  type="text" placeholder="Type excluded letters..">
+                <p id="guess-msg" class="msg"></p>
             </div>
 
+            <div class="form-group">
+                <label>Your guesses <span>(tap a tile: gray, yellow, green)</span></label>
+                <div id="rows"></div>
+                <p id="known" class="msg"></p>
+                <button type="button" id="clear" class="ghost">Clear all</button>
+            </div>
         </form>
 
-        <section id="results"></section>
+        <section id="side">
+            <div id="summary"></div>
+            <div id="best"></div>
+            <div id="results"></div>
+        </section>
     </main>
 
     <footer>
         <a target="_blank" href="https://vineethtrv.github.io/">
-            👨&zwj;💻 Vineeth TR
+            Original by Vineeth TR
         </a>
+        <span> · </span>
+        <a target="_blank" href="https://github.com/onionviolet/wordle-helper">Fork with repeated-letter support</a>
     </footer>
 
 

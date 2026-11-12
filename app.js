@@ -1,169 +1,152 @@
-
 import { COLLECTION } from './data.js';
-let includeLetters; 
-let excludeLetters;
-let correctLetters = [null, null, null, null, null];
-const inPresent = document.getElementById('input-present');
-const inAbsent = document.getElementById('input-absent');
-const FIRST_ENTRY = [
-    'ratio',
-    'mends',
-    'lucky',
+import { GRAY, YELLOW, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses } from './logic.js';
 
-    'junks',
-    'whomp',
-    'calyx',
-    'fritz',
+// data.js holds the original 2,309 answer words first, then the extra
+// allowed guesses. NYT has edited answers since 2022, so the extras still
+// show, just below the likely answers.
+const ANSWER_COUNT = 2309;
+const ALL = [...new Set(COLLECTION)];
+const ANSWERS = new Set(ALL.slice(0, ANSWER_COUNT));
+const VALID = new Set(ALL);
+const SHOW_MAX = 500;
+const BEST_MAX_TARGETS = 250;
+const STORE_KEY = 'wordle-helper-rows-v1';
 
-    'tubes',
-    'fling',
-    'champ',
-    'wordy',
+const FIRST_ENTRY = ['salet', 'crane', 'slate', 'trace', 'crate', 'raise', 'stare', 'arose', 'audio', 'roate'];
 
-    'stone',
-    'audio',
-    'roate',
-    'raise',
-    'rakes',
-    'soare',
-    'dingo',
-    'beast',
-    'beaks',
-    'siren',
-    'stare',
-    'doing',
-    'mango',
-    'faint',
-    'rival',
+const $ = id => document.getElementById(id);
+const input = $('guess-input');
+const COLOR_CLASS = ['gray', 'yellow', 'green'];
 
-];
+let rows = load();
+let bestTimer = null;
 
-
-const generateSuggestion = (collection) =>{
-    let wordEl = '';
-    let length = collection.length > 500 ? 500 : collection.length;
-
-    for (let i = 0; i < length; i++){
-        let letters = '';
-        for (let l = 0; l < 5; l++){
-            const letter = collection[i][l];
-            const incSty = includeLetters && includeLetters.includes(letter)? 'incSty': '';
-            const crtSty = correctLetters.includes(letter) ? 'crtSty': '';
-
-
-            letters += `<i class="${incSty + crtSty}"> ${letter} </i>`
-        }
-        wordEl += `<span class="word">${letters}</span>`
-    }
-    document.getElementById('results').innerHTML = wordEl;
+function load() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
+        if (Array.isArray(saved)) return saved.filter(r => /^[a-z]{5}$/.test(r.word) && r.colors?.length === 5);
+    } catch (_) { /* storage blocked */ }
+    return [];
+}
+function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(rows)); } catch (_) { /* ignore */ }
 }
 
-const preventKeys = (e , n) => {
-    if (!(e.key.match(/^[A-Za-z]+$/)
-        && e.target.value.length < n
-        || e.key === 'Backspace'
-        || e.code === "Backspace"
-        || e.keyCode === 8
-    )
-    ) {
-        e.preventDefault();
+// Pre-color a new guess with anything already proven, so the player
+// usually only has to tap the new information.
+function guessColors(word) {
+    const k = knowledge(rows);
+    return word.split('').map((c, i) => (k.green[i] === c ? GREEN : GRAY));
+}
+
+function addGuess(raw) {
+    const word = (raw || '').toLowerCase().replace(/[^a-z]/g, '');
+    const msg = $('guess-msg');
+    if (word.length !== 5) { msg.textContent = 'A guess needs exactly 5 letters.'; return; }
+    if (rows.length >= 6) { msg.textContent = 'Wordle allows six guesses. Remove one first.'; return; }
+    msg.textContent = VALID.has(word) ? '' : `"${word.toUpperCase()}" is not in the word list, but it was added.`;
+    rows.push({ word, colors: guessColors(word) });
+    input.value = '';
+    update();
+}
+
+function renderRows() {
+    $('rows').innerHTML = rows.map((r, ri) => `
+        <div class="row">
+            ${r.word.split('').map((c, i) => `<button type="button" class="tile ${COLOR_CLASS[r.colors[i]]}" data-r="${ri}" data-i="${i}" aria-label="${c} ${COLOR_CLASS[r.colors[i]]}">${c}</button>`).join('')}
+            <button type="button" class="remove" data-r="${ri}" aria-label="Remove guess">×</button>
+        </div>`).join('');
+}
+
+function renderKnown() {
+    const k = knowledge(rows);
+    const bits = [];
+    for (const c of Object.keys(k.min).sort()) {
+        if (k.exact[c] !== undefined) bits.push(`exactly ${k.exact[c]} ${c.toUpperCase()}`);
+        else if (k.min[c] > 1) bits.push(`at least ${k.min[c]} ${c.toUpperCase()}`);
+    }
+    const absent = Object.keys(k.exact).filter(c => k.exact[c] === 0).sort();
+    if (absent.length) bits.push(`no ${absent.join(' ').toUpperCase()}`);
+    $('known').textContent = bits.length ? `Known: ${bits.join(', ')}.` : '';
+}
+
+function wordHtml(w, k) {
+    const letters = w.split('').map((c, i) => {
+        const cls = k.green[i] === c ? 'crtSty' : k.present.has(c) ? 'incSty' : '';
+        return `<i class="${cls}">${c}</i>`;
+    }).join('');
+    return `<button type="button" class="word" data-w="${w}" title="Add ${w.toUpperCase()} as a guess">${letters}</button>`;
+}
+
+function renderResults() {
+    const k = knowledge(rows);
+    clearTimeout(bestTimer);
+    $('best').innerHTML = '';
+
+    if (!rows.length) {
+        $('summary').innerHTML = `<h2>Strong first guesses</h2><p>${ALL.length.toLocaleString()} words in the list, ${ANSWER_COUNT.toLocaleString()} of them past or likely answers.</p>`;
+        $('results').innerHTML = FIRST_ENTRY.map(w => wordHtml(w, k)).join('');
+        return;
+    }
+
+    const cands = filterCandidates(ALL, rows);
+    const likely = rankByFrequency(cands.filter(w => ANSWERS.has(w)));
+    const other = rankByFrequency(cands.filter(w => !ANSWERS.has(w)));
+
+    if (!cands.length) {
+        $('summary').innerHTML = '<h2>No words match</h2><p>Check the tile colors. A gray tile next to a yellow or green of the same letter means "no more copies of that letter".</p>';
+        $('results').innerHTML = '';
+        return;
+    }
+
+    $('summary').innerHTML = `<h2>${cands.length.toLocaleString()} possible word${cands.length === 1 ? '' : 's'}</h2>
+        <p>${likely.length} from the answer list, ${other.length} other valid words. Sorted by common letters.</p>`;
+
+    let html = '';
+    if (likely.length) html += `<h3>Likely answers</h3><div class="group">${likely.slice(0, SHOW_MAX).map(w => wordHtml(w, k)).join('')}</div>`;
+    if (other.length) {
+        const room = Math.max(SHOW_MAX - likely.length, 60);
+        html += `<h3>Other valid words</h3><div class="group dim">${other.slice(0, room).map(w => wordHtml(w, k)).join('')}</div>`;
+        if (other.length > room) html += `<p class="msg">${other.length - room} more not shown.</p>`;
+    }
+    $('results').innerHTML = html;
+
+    // Best next guess: entropy over the likely answers (or everything left).
+    const targets = likely.length ? likely : other;
+    if (targets.length > 2 && targets.length <= BEST_MAX_TARGETS && rows.length < 6) {
+        $('best').innerHTML = '<p class="msg">Working out the best next guess...</p>';
+        bestTimer = setTimeout(() => {
+            const best = bestGuesses(ALL, targets, 5);
+            $('best').innerHTML = `<h3>Best next guess <span>(splits the ${targets.length} likely words most evenly)</span></h3>
+                <div class="group">${best.map(b => `<span class="best-item">${wordHtml(b.word, k)}<small>${b.isCandidate ? 'could win · ' : ''}~${b.expLeft.toFixed(1)} left</small></span>`).join('')}</div>`;
+        }, 30);
     }
 }
 
-
-const validateKeys = (e , n) => {
-    preventKeys(e , n);
-    // prevent Duplicate
-    if (
-            e.key.length === 1 && 
-            includeLetters && 
-            includeLetters.includes(e.key) ||
-            
-            e.key.length === 1 && 
-            excludeLetters &&
-            excludeLetters.includes(e.key)
-        ){
-        e.preventDefault();
-    }
+function update() {
+    save();
+    renderRows();
+    renderKnown();
+    renderResults();
 }
 
+input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addGuess(input.value); } });
+input.addEventListener('input', () => { input.value = input.value.replace(/[^a-zA-Z]/g, '').slice(0, 5); });
+$('add-guess').addEventListener('click', () => addGuess(input.value));
+$('clear').addEventListener('click', () => { rows = []; $('guess-msg').textContent = ''; update(); });
 
-const wordFilter = ()=> {
-
-    let wordsList = COLLECTION;
-
-    // Letters in correct position
-    if (correctLetters){
-        correctLetters.forEach( (latter , i) => {
-            if (latter){
-                wordsList = wordsList.filter(word => word[i] == latter )
-            }
-        })
-    }
-
-
-    // Letters can be excluded from the word
-    if (excludeLetters){
-        wordsList =   wordsList.filter(word => {
-            for (let i = 0; i < excludeLetters.length; i++) {
-                if (word.includes(excludeLetters[i])) {
-                       return false
-                   }
-                if (excludeLetters.length === i + 1) {
-                    return true
-                }
-               }
-           })
-    }
-        
-    // Letters anywhere in word but not in correct position
-    if (includeLetters) {
-         wordsList =   wordsList.filter(word => {
-                for (let i = 0; i < includeLetters.length; i++) {
-                    if (!word.includes(includeLetters[i])) {
-                        return false
-                    }
-                    if (includeLetters.length === i + 1) {
-                        return true
-                    }
-                }
-            })
-    }
-    
-   
-    //    console.log(wordsList);
-   generateSuggestion(wordsList)
-
-}
-
-
-// Include event
-inPresent.addEventListener('keydown', e => validateKeys(e, 5));
-inPresent.addEventListener('input', (e) => {
-    includeLetters = e.target.value.replace(/[.,\s]/g, '').toLowerCase();
-    wordFilter();
-})
-
-// Exclude event
-inAbsent.addEventListener('keydown', e => validateKeys(e, 22));
-inAbsent.addEventListener('input', (e) => {
-    excludeLetters = e.target.value.replace(/[.,\s]/g, '').toLowerCase();
-    wordFilter();
-})
-
-
-document.querySelectorAll("#form-correct input").forEach(correctInput => {
-    correctInput.addEventListener('keydown', e => preventKeys(e, 1));
-    
-    correctInput.addEventListener('input', (e) => {
-        correctLetters[parseInt(e.target.dataset.index)] = e.target.value.toLowerCase();
-        wordFilter();
-    });
-
+$('rows').addEventListener('click', e => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    const r = +t.dataset.r;
+    if (t.classList.contains('remove')) rows.splice(r, 1);
+    else { const i = +t.dataset.i; rows[r].colors[i] = (rows[r].colors[i] + 1) % 3; }
+    update();
 });
 
+$('side').addEventListener('click', e => {
+    const w = e.target.closest('.word');
+    if (w) addGuess(w.dataset.w);
+});
 
-
-
-// First Load the
-generateSuggestion(FIRST_ENTRY)
+update();
