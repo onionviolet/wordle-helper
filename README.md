@@ -6,6 +6,7 @@ Fork of [vineethtrv/wordle-helper](https://github.com/vineethtrv/wordle-helper) 
 - Yellow tiles also rule out that position, which the old "Present" box could not express.
 - Likely answers (the original answer list) are listed before other valid words, each sorted by common letters, with a live count.
 - **Best next guess:** once 250 or fewer likely answers remain, it ranks every valid word by how evenly it splits them (expected words left).
+- **Paste your share grid** (normal or high-contrast squares). The colors fill in, and you type each row's word. Lines like `CRANE 🟩⬛🟨⬛⬛` fill in the word too.
 - Tap any suggested word to add it as a guess. Guesses persist in the browser until cleared.
 - Fixed result highlighting, which colored a letter green at any position.
 

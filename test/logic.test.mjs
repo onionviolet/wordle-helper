@@ -46,3 +46,17 @@ t('bestGuesses runs fast on a small set', () => {
   console.log('   ', targets.length, 'targets,', ms, 'ms, top:', b.map(x => `${x.word} ${x.bits.toFixed(2)}`).join(', '));
 });
 console.log(n, 'tests passed');
+
+import { parseShare } from '../logic.js';
+t('parses a normal share block', () => {
+  const r = parseShare('Wordle 1,606 4/6\n\n⬛🟨⬛⬛⬛\n⬜⬜🟩🟨⬜\n🟩🟩🟩⬛🟩\n🟩🟩🟩🟩🟩');
+  assert.equal(r.length, 4);
+  assert.deepEqual(r[0].colors, p('01000'));
+  assert.deepEqual(r[1].colors, p('00210'));
+  assert.equal(r[0].word, null);
+});
+t('parses high contrast and inline words', () => {
+  const r = parseShare('crane 🟧⬛🟦⬛⬛\nnotes here');
+  assert.deepEqual(r, [{ word: 'crane', colors: p('20100') }]);
+});
+console.log(n, 'tests passed');

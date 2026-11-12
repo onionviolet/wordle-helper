@@ -89,3 +89,19 @@ export function bestGuesses(pool, targets, top = 5) {
     results.sort((a, b) => b.key - a.key);
     return results.slice(0, top);
 }
+
+// Parse a pasted Wordle share block. Each line with five color squares
+// becomes one row. A 5-letter word on the same line (e.g. "CRANE 🟩⬛🟨⬛⬛")
+// is kept; otherwise word is null and the player types it later.
+// Supports normal (green/yellow) and high-contrast (orange/blue) squares.
+const SQUARE = { '🟩': GREEN, '🟧': GREEN, '🟨': YELLOW, '🟦': YELLOW, '⬛': GRAY, '⬜': GRAY };
+export function parseShare(text) {
+    const out = [];
+    for (const line of String(text).split(/\r?\n/)) {
+        const colors = Array.from(line).filter(ch => ch in SQUARE).map(ch => SQUARE[ch]);
+        if (colors.length !== 5) continue;
+        const m = line.match(/\b[a-zA-Z]{5}\b/);
+        out.push({ word: m ? m[0].toLowerCase() : null, colors });
+    }
+    return out;
+}

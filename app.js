@@ -1,5 +1,5 @@
 import { COLLECTION } from './data.js';
-import { GRAY, YELLOW, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses } from './logic.js';
+import { GRAY, YELLOW, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, parseShare } from './logic.js';
 
 // data.js holds the original 2,309 answer words first, then the extra
 // allowed guesses. NYT has edited answers since 2022, so the extras still
@@ -20,11 +20,12 @@ const COLOR_CLASS = ['gray', 'yellow', 'green'];
 
 let rows = load();
 let bestTimer = null;
+const played = () => rows.filter(r => r.word);
 
 function load() {
     try {
         const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
-        if (Array.isArray(saved)) return saved.filter(r => /^[a-z]{5}$/.test(r.word) && r.colors?.length === 5);
+        if (Array.isArray(saved)) return saved.filter(r => (r.word === null || /^[a-z]{5}$/.test(r.word)) && r.colors?.length === 5);
     } catch (_) { /* storage blocked */ }
     return [];
 }
@@ -35,7 +36,7 @@ function save() {
 // Pre-color a new guess with anything already proven, so the player
 // usually only has to tap the new information.
 function guessColors(word) {
-    const k = knowledge(rows);
+    const k = knowledge(played());
     return word.split('').map((c, i) => (k.green[i] === c ? GREEN : GRAY));
 }
 
@@ -43,9 +44,11 @@ function addGuess(raw) {
     const word = (raw || '').toLowerCase().replace(/[^a-z]/g, '');
     const msg = $('guess-msg');
     if (word.length !== 5) { msg.textContent = 'A guess needs exactly 5 letters.'; return; }
-    if (rows.length >= 6) { msg.textContent = 'Wordle allows six guesses. Remove one first.'; return; }
+    const pending = rows.find(r => !r.word);
+    if (!pending && rows.length >= 6) { msg.textContent = 'Wordle allows six guesses. Remove one first.'; return; }
     msg.textContent = VALID.has(word) ? '' : `"${word.toUpperCase()}" is not in the word list, but it was added.`;
-    rows.push({ word, colors: guessColors(word) });
+    if (pending) pending.word = word;
+    else rows.push({ word, colors: guessColors(word) });
     input.value = '';
     update();
 }
@@ -53,13 +56,14 @@ function addGuess(raw) {
 function renderRows() {
     $('rows').innerHTML = rows.map((r, ri) => `
         <div class="row">
-            ${r.word.split('').map((c, i) => `<button type="button" class="tile ${COLOR_CLASS[r.colors[i]]}" data-r="${ri}" data-i="${i}" aria-label="${c} ${COLOR_CLASS[r.colors[i]]}">${c}</button>`).join('')}
+            ${r.colors.map((col, i) => { const c = r.word ? r.word[i] : ''; return `<button type="button" class="tile ${COLOR_CLASS[col]}${r.word ? '' : ' pending'}" data-r="${ri}" data-i="${i}" aria-label="${c || 'blank'} ${COLOR_CLASS[col]}">${c}</button>`; }).join('')}
+            ${r.word ? '' : '<span class="hint">type this word</span>'}
             <button type="button" class="remove" data-r="${ri}" aria-label="Remove guess">×</button>
         </div>`).join('');
 }
 
 function renderKnown() {
-    const k = knowledge(rows);
+    const k = knowledge(played());
     const bits = [];
     for (const c of Object.keys(k.min).sort()) {
         if (k.exact[c] !== undefined) bits.push(`exactly ${k.exact[c]} ${c.toUpperCase()}`);
@@ -79,17 +83,17 @@ function wordHtml(w, k) {
 }
 
 function renderResults() {
-    const k = knowledge(rows);
+    const k = knowledge(played());
     clearTimeout(bestTimer);
     $('best').innerHTML = '';
 
-    if (!rows.length) {
+    if (!played().length) {
         $('summary').innerHTML = `<h2>Strong first guesses</h2><p>${ALL.length.toLocaleString()} words in the list, ${ANSWER_COUNT.toLocaleString()} of them past or likely answers.</p>`;
         $('results').innerHTML = FIRST_ENTRY.map(w => wordHtml(w, k)).join('');
         return;
     }
 
-    const cands = filterCandidates(ALL, rows);
+    const cands = filterCandidates(ALL, played());
     const likely = rankByFrequency(cands.filter(w => ANSWERS.has(w)));
     const other = rankByFrequency(cands.filter(w => !ANSWERS.has(w)));
 
@@ -113,7 +117,7 @@ function renderResults() {
 
     // Best next guess: entropy over the likely answers (or everything left).
     const targets = likely.length ? likely : other;
-    if (targets.length > 2 && targets.length <= BEST_MAX_TARGETS && rows.length < 6) {
+    if (targets.length > 2 && targets.length <= BEST_MAX_TARGETS && played().length < 6) {
         $('best').innerHTML = '<p class="msg">Working out the best next guess...</p>';
         bestTimer = setTimeout(() => {
             const best = bestGuesses(ALL, targets, 5);
@@ -133,6 +137,22 @@ function update() {
 input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addGuess(input.value); } });
 input.addEventListener('input', () => { input.value = input.value.replace(/[^a-zA-Z]/g, '').slice(0, 5); });
 $('add-guess').addEventListener('click', () => addGuess(input.value));
+$('share-input').addEventListener('input', e => {
+    // A wordless all-green row is the solved answer; nothing left to filter.
+    const parsed = parseShare(e.target.value).filter(r => r.word || r.colors.some(c => c !== GREEN)).slice(0, 6);
+    const msg = $('guess-msg');
+    if (!parsed.length) { if (e.target.value.trim()) msg.textContent = 'No rows of five colored squares found.'; return; }
+    parsed.forEach((p, i) => {
+        if (rows[i]) { rows[i].colors = p.colors; if (p.word) rows[i].word = p.word; }
+        else rows.push({ word: p.word, colors: p.colors });
+    });
+    const missing = rows.filter(r => !r.word).length;
+    msg.textContent = `Loaded ${parsed.length} row${parsed.length === 1 ? '' : 's'} of colors.` + (missing ? ` Type the ${missing === 1 ? 'missing word' : missing + ' missing words, in order'}.` : '');
+    e.target.value = '';
+    update();
+    if (missing) input.focus();
+});
+
 $('clear').addEventListener('click', () => { rows = []; $('guess-msg').textContent = ''; update(); });
 
 $('rows').addEventListener('click', e => {
