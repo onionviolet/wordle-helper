@@ -4,8 +4,8 @@ Fork of [vineethtrv/wordle-helper](https://github.com/vineethtrv/wordle-helper) 
 
 - **Repeated letters work.** Enter each guess and tap its tiles (gray, yellow, green) to match the game. The filter replays Wordle's own scoring, so "exactly one E" (one colored E plus a gray E), "at least two E's" (two colored E's) and "no E in this spot" all come out right.
 - Yellow tiles also rule out that position, which the old "Present" box could not express.
-- Likely answers (the original answer list) are listed before other valid words, each sorted by common letters, with a live count.
-- **Best next guess, always on:** after every guess it ranks every valid word by how evenly it splits the likely answers (expected words left). It runs in a web worker, so it works with the whole answer list still in play.
+- **Every valid word is covered.** The list holds all 14,855 valid guesses in three tiers: the 2,309 classic answers, 1,905 other common words (NYT now picks answers outside the classic list), and the rare rest. All tiers stay in the results, color-coded, so a newer answer never disappears.
+- **Best next guess, always on:** after every guess it ranks every valid word by how well it splits the words still standing, weighted so classic answers count most, common words less and rare words a little. It runs in a web worker.
 - **Hard mode** toggle: only suggests guesses that keep every green and reuse every revealed letter.
 - **Hints only** toggle: hides the word list and keeps the count and best guess, for help without the answer.
 - **Correct, Present and Absent boxes** from the original sit at the top for a quick filter without entering whole guesses. They fill in from the guess rows as you color tiles, and letters you type yourself are added on top.
@@ -17,3 +17,5 @@ Fork of [vineethtrv/wordle-helper](https://github.com/vineethtrv/wordle-helper) 
 Live: https://onionviolet.github.io/wordle-helper/
 
 Run tests: `node test/logic.test.mjs`
+
+Rebuild the word data: `python3 tools/build_data.py WORDS.txt COUNT_1W.txt` (sources are named at the top of the script). After any release, bump every `?v=` in `index.html`, `app.js` and `worker.js` together.

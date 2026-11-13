@@ -64,24 +64,30 @@ export function rankByFrequency(words) {
 }
 
 // Best next guesses by expected information (entropy of the color pattern
-// over the remaining candidates). Cost is |pool| x |targets|, so the inner
-// loop works on letter codes and allocates nothing. `onProgress` gets a
-// 0..1 fraction now and then (used by the worker).
+// over the remaining candidates). `weights[t]` says how likely targets[t] is
+// to be the answer (default: all equal), so common words count for more
+// than obscure ones without the obscure ones ever being ignored. Cost is
+// |pool| x |targets|, so the inner loop works on letter codes and allocates
+// nothing. `onProgress` gets a 0..1 fraction now and then (used by the worker).
 const POW3 = [1, 3, 9, 27, 81];
-export function bestGuesses(pool, targets, top = 5, onProgress) {
+export function bestGuesses(pool, targets, top = 5, onProgress, weights) {
     const n = targets.length;
-    const targetSet = new Set(targets);
+    const W = new Float64Array(n);
+    let total = 0;
+    for (let t = 0; t < n; t++) { W[t] = weights ? weights[t] : 1; total += W[t]; }
+    const share = new Map(targets.map((w, t) => [w, W[t] / total]));
     const T = new Uint8Array(n * 5);
     for (let t = 0; t < n; t++) for (let i = 0; i < 5; i++) T[t * 5 + i] = targets[t].charCodeAt(i) - 97;
     const counts = new Uint16Array(243);
+    const mass = new Float64Array(243);
     const left = new Int8Array(26);
     const g = new Uint8Array(5);
     const results = [];
     for (let pi = 0; pi < pool.length; pi++) {
         const word = pool[pi];
         for (let i = 0; i < 5; i++) g[i] = word.charCodeAt(i) - 97;
-        counts.fill(0);
-        for (let o = 0; o < n * 5; o += 5) {
+        counts.fill(0); mass.fill(0);
+        for (let t = 0, o = 0; t < n; t++, o += 5) {
             let code = 0;
             for (let i = 0; i < 5; i++) {
                 const a = T[o + i];
@@ -92,19 +98,19 @@ export function bestGuesses(pool, targets, top = 5, onProgress) {
                 if (c !== T[o + i] && left[c] > 0) { code += POW3[i]; left[c]--; }
             }
             for (let i = 0; i < 5; i++) left[T[o + i]] = 0;
-            counts[code]++;
+            counts[code]++; mass[code] += W[t];
         }
+        // expLeft: how many words are still standing afterwards, on average.
         let h = 0, expLeft = 0;
         for (let k = 0; k < 243; k++) {
-            const c = counts[k];
-            if (!c) continue;
-            const p = c / n;
-            h -= p * Math.log2(p);
-            expLeft += c * p;
+            if (!counts[k]) continue;
+            const p = mass[k] / total;
+            if (p > 0) h -= p * Math.log2(p);
+            expLeft += p * counts[k];
         }
-        // A candidate guess can win outright; give it a small edge on ties.
-        const isCandidate = targetSet.has(word);
-        results.push({ word, bits: h, expLeft, isCandidate, key: h + (isCandidate ? 1 / n : 0) });
+        // A candidate guess can win outright; give it an edge by its own odds.
+        const win = share.get(word) || 0;
+        results.push({ word, bits: h, expLeft, isCandidate: share.has(word), key: h + win });
         if (onProgress && pi % 1000 === 999) onProgress(pi / pool.length);
     }
     results.sort((a, b) => b.key - a.key);

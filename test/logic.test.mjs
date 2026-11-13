@@ -86,3 +86,25 @@ t('correct boxes pin letters to positions', () => {
   assert.ok(c.every(w => w[0] === 's' && w[2] === 'a' && w[4] === 'e'));
 });
 console.log(n, 'tests passed');
+
+import { ANSWER_COUNT, COMMON_COUNT } from '../data.js';
+t('word list covers every tier without duplicates', () => {
+  assert.equal(ANSWER_COUNT, 2309);
+  assert.equal(new Set(COLLECTION).size, COLLECTION.length);
+  assert.ok(COLLECTION.length >= 14000 && COLLECTION.every(w => /^[a-z]{5}$/.test(w)));
+});
+t('a game whose answer is outside the classic list still ranks it', () => {
+  const rows = [{ word: 'salet', colors: p('00010') }, { word: 'drone', colors: p('00102') }, { word: 'voice', colors: p('02102') }];
+  const c = filterCandidates(COLLECTION, rows);
+  const common = new Set(COLLECTION.slice(ANSWER_COUNT, ANSWER_COUNT + COMMON_COUNT));
+  assert.ok(c.filter(w => common.has(w)).length >= 2, c.join(' '));
+  assert.ok(c.includes('homie') && common.has('homie') && c.includes('moxie') && common.has('moxie'));
+});
+t('weights steer the best guess toward likely words', () => {
+  const targets = ['homie', 'moxie', 'zowie', 'yowie', 'pokie'];
+  const even = bestGuesses(COLLECTION.slice(0, 3000), targets, 1)[0];
+  const tilted = bestGuesses(COLLECTION.slice(0, 3000), targets, 1, null, [1, 1, 0.01, 0.01, 0.01])[0];
+  assert.ok(score(tilted.word, 'homie').join('') !== score(tilted.word, 'moxie').join(''));
+  assert.ok(even.expLeft >= 1 && tilted.expLeft >= 1);
+});
+console.log(n, 'tests passed');

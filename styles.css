@@ -359,3 +359,9 @@ header{ border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--cor
 .group .word i.crtSty{ background-color: var(--correct); }
 .best-item small em{ font-style: normal; font-weight: bold; color: var(--few); }
 .c-warn{ color: var(--many); }
+:root{ --common: #0d9488; }
+.c-common{ color: var(--common); }
+#side h2.h-common, #side h3.h-common{ border-left-color: var(--common); color: var(--common); }
+.group.common .word i{ background-color: var(--common); }
+.group.common .word i.incSty{ background-color: var(--present); }
+.group.common .word i.crtSty{ background-color: var(--correct); }

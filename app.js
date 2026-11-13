@@ -1,13 +1,18 @@
-import { COLLECTION } from './data.js';
-import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, hardLegal, quickFilter } from './logic.js?v=6';
+import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=7';
+import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, hardLegal, quickFilter } from './logic.js?v=7';
 
-// data.js holds the original 2,309 answer words first, then the extra
-// allowed guesses. NYT has edited answers since 2022, so the extras still
-// show, just below the likely answers.
-const ANSWER_COUNT = 2309;
-const ALL = [...new Set(COLLECTION)];
-const ANSWERS = new Set(ALL.slice(0, ANSWER_COUNT));
+// data.js lists every valid guess in three tiers: the 2,309 classic answers,
+// then other common words, then rare ones. NYT picks answers outside the
+// classic list now, so every tier stays in play and the tiers only decide
+// how much weight a word gets.
+const ALL = COLLECTION;
+const TIER = new Map(ALL.map((w, i) => [w, i < ANSWER_COUNT ? 0 : i < ANSWER_COUNT + COMMON_COUNT ? 1 : 2]));
+const NOT_RARE = ALL.slice(0, ANSWER_COUNT + COMMON_COUNT);
 const VALID = new Set(ALL);
+// Odds of being the answer, relative to a classic answer. Past-tense -ed
+// words are common in text but almost never chosen.
+const weight = w => { const t = TIER.get(w); return t === 0 ? 1 : t === 1 ? (w.endsWith('ed') ? 0.05 : 0.2) : 0.01; };
+const BEST_MAX_TARGETS = 1500; // above this, rare words are left out of the search
 const SHOW_MAX = 500;
 const BEST_MAX_INLINE = 250; // main-thread fallback limit when workers are unavailable
 const STORE_KEY = 'wordle-helper-rows-v1';
@@ -93,7 +98,7 @@ function addGuess(raw) {
 // How many likely answers were still possible after each guess, so the
 // player can see how much every guess narrowed things down.
 function leftAfterEach() {
-    let cur = ALL.filter(w => ANSWERS.has(w)), any = ALL, out = [];
+    let cur = NOT_RARE, any = ALL, out = [];
     for (const r of rows) {
         if (!r.word) { out.push(null); continue; }
         cur = filterCandidates(cur, [r]); any = filterCandidates(any, [r]);
@@ -138,40 +143,49 @@ function renderResults() {
     $('best').innerHTML = '';
 
     if (!hasClues()) {
-        $('summary').innerHTML = `<h2 class="h-best">Strong first guesses</h2><p>${ALL.length.toLocaleString()} words in the list, ${ANSWER_COUNT.toLocaleString()} of them past or likely answers.</p>`;
+        $('summary').innerHTML = `<h2 class="h-best">Strong first guesses</h2><p>${ALL.length.toLocaleString()} valid words: <b class="c-likely">${ANSWER_COUNT.toLocaleString()}</b> classic answers, <b class="c-common">${COMMON_COUNT.toLocaleString()}</b> other common words, the rest rare.</p>`;
         $('results').innerHTML = `<div class="group best">${FIRST_ENTRY.map(w => wordHtml(w, k)).join('')}</div>`;
         return;
     }
 
     const cands = quickFilter(filterCandidates(ALL, played()), opts.present, opts.absent, knowledge(played()).present, opts.correct);
-    const likely = rankByFrequency(cands.filter(w => ANSWERS.has(w)));
-    const other = rankByFrequency(cands.filter(w => !ANSWERS.has(w)));
-
     if (!cands.length) {
         $('summary').innerHTML = '<h2>No words match</h2><p>Check the tile colors. A gray tile next to a yellow or green of the same letter means "no more copies of that letter".</p>';
         $('results').innerHTML = '';
         return;
     }
 
+    const groups = [
+        { key: 'likely', title: 'Likely answers', note: 'classic answer list', words: rankByFrequency(cands.filter(w => TIER.get(w) === 0)) },
+        { key: 'common', title: 'Possible answers', note: 'common words outside the classic list', words: rankByFrequency(cands.filter(w => TIER.get(w) === 1)) },
+        { key: 'other', title: 'Rare words', note: 'valid guesses, unlikely answers', words: rankByFrequency(cands.filter(w => TIER.get(w) === 2)) },
+    ];
+    const [likely, common, rare] = groups.map(g => g.words);
+    const lead = likely.length ? '' : common.length
+        ? '<b class="c-warn">No classic answer fits,</b> so it is most likely one of the common words. '
+        : '<b class="c-warn">Only rare words fit.</b> Double-check the tile colors. ';
+
     $('summary').innerHTML = `<h2><b class="count ${cands.length <= 10 ? 'few' : cands.length <= 100 ? 'some' : 'many'}">${cands.length.toLocaleString()}</b> possible word${cands.length === 1 ? '' : 's'}</h2>
-        <p>${likely.length
-            ? `<b class="c-likely">${likely.length}</b> from the answer list, <b class="c-other">${other.length}</b> other valid words. Sorted by common letters.`
-            : `<b class="c-warn">None are in the classic answer list.</b> Today's word is a newer or rarer one, or a tile color is off. These are all the valid words that fit.`}</p>`;
+        <p>${lead}<b class="c-likely">${likely.length}</b> classic answers, <b class="c-common">${common.length}</b> other common words, <b class="c-other">${rare.length}</b> rare.</p>`;
 
     let html = '';
     if (opts.hide) html = '<p class="msg">Word list hidden. Untick "Hints only" to see it.</p>';
     else {
-        if (likely.length) html += `<h3 class="h-likely">Likely answers</h3><div class="group likely">${likely.slice(0, SHOW_MAX).map(w => wordHtml(w, k)).join('')}</div>`;
-        if (other.length) {
-            const room = Math.max(SHOW_MAX - likely.length, 60);
-            html += `<h3 class="h-other">${likely.length ? 'Other valid words' : 'Valid words that fit'}</h3><div class="group other">${other.slice(0, room).map(w => wordHtml(w, k)).join('')}</div>`;
-            if (other.length > room) html += `<p class="msg">${other.length - room} more not shown.</p>`;
+        let room = SHOW_MAX;
+        for (const g of groups) {
+            if (!g.words.length) continue;
+            const shown = g.words.slice(0, Math.max(room, 60));
+            room -= shown.length;
+            html += `<h3 class="h-${g.key}">${g.title} <span>(${g.note})</span></h3><div class="group ${g.key}">${shown.map(w => wordHtml(w, k)).join('')}</div>`;
+            if (g.words.length > shown.length) html += `<p class="msg">${g.words.length - shown.length} more not shown.</p>`;
         }
     }
     $('results').innerHTML = html;
 
-    // Best next guess: entropy over the likely answers (or everything left).
-    const targets = likely.length ? likely : other;
+    // Best next guess: weighted entropy over every word still standing.
+    // Rare words are only dropped while the list is too long to search fast.
+    const notRare = [...likely, ...common];
+    const targets = cands.length <= BEST_MAX_TARGETS || !notRare.length ? [...notRare, ...rare] : notRare;
     if (targets.length > 2 && played().length < 6) requestBest(targets, k);
 }
 
@@ -184,21 +198,23 @@ function cancelBest() {
 // Ranks every valid word (or every hard-mode-legal word) in a worker.
 function requestBest(targets, k) {
     const id = jobId;
+    const weights = targets.map(weight);
+    const allRare = targets.every(w => TIER.get(w) === 2);
     const pool = opts.hard ? ALL.filter(w => hardLegal(w, k)) : null;
     const show = best => {
         if (id !== jobId) return;
-        $('best').innerHTML = `<h3 class="h-best">Best next guess <span>(${opts.hard ? 'hard mode, ' : ''}splits the ${targets.length.toLocaleString()} ${targets.some(w => ANSWERS.has(w)) ? 'likely' : 'remaining'} words most evenly)</span></h3>
-            <div class="group best">${best.map(b => `<span class="best-item">${wordHtml(b.word, k)}<small>${b.isCandidate ? '<em>could win</em> · ' : ''}~${b.expLeft.toFixed(1)} left</small></span>`).join('')}</div>`;
+        $('best').innerHTML = `<h3 class="h-best">Best next guess <span>(${opts.hard ? 'hard mode, ' : ''}splits the ${targets.length.toLocaleString()} remaining words, weighted toward likely answers)</span></h3>
+            <div class="group best">${best.map(b => `<span class="best-item">${wordHtml(b.word, k)}<small>${b.isCandidate && (TIER.get(b.word) < 2 || allRare) ? '<em>could win</em> · ' : ''}~${b.expLeft.toFixed(1)} left</small></span>`).join('')}</div>`;
     };
     const inline = () => {
         workerBusy = false; worker = null;
         if (id !== jobId) return;
         if (targets.length > BEST_MAX_INLINE) { $('best').innerHTML = ''; return; }
-        bestTimer = setTimeout(() => show(bestGuesses(pool || ALL, targets, 5)), 30);
+        bestTimer = setTimeout(() => show(bestGuesses(pool || ALL, targets, 5, null, weights)), 30);
     };
     $('best').innerHTML = '<p class="msg">Working out the best next guess...</p>';
     try {
-        if (!worker) worker = new Worker('./worker.js?v=6', { type: 'module' });
+        if (!worker) worker = new Worker('./worker.js?v=7', { type: 'module' });
         workerBusy = true;
         worker.onmessage = e => {
             if (e.data.id !== id || id !== jobId) return;
@@ -206,7 +222,7 @@ function requestBest(targets, k) {
             else $('best').innerHTML = `<p class="msg">Working out the best next guess... ${Math.round(e.data.progress * 100)}%</p>`;
         };
         worker.onerror = e => { e.preventDefault(); inline(); };
-        worker.postMessage({ id, targets, pool, top: 5 });
+        worker.postMessage({ id, targets, weights, pool, top: 5 });
     } catch (_) { inline(); }
 }
 
