@@ -119,6 +119,22 @@ export function hardLegal(word, k) {
     return true;
 }
 
+// Quick letter boxes, for filtering without entering a whole guess.
+// `present`: letters the word must contain (typing a letter twice asks for
+// two copies). `absent`: letters the word must not contain; a letter that
+// is also known to be in the word is ignored there rather than trusted.
+export function quickFilter(words, present, absent, lit = new Set()) {
+    const need = {};
+    for (const c of present) need[c] = (need[c] || 0) + 1;
+    const banned = [...new Set(absent)].filter(c => !need[c] && !lit.has(c));
+    if (!banned.length && !present.length) return words;
+    return words.filter(w => {
+        for (const c of banned) if (w.includes(c)) return false;
+        for (const c in need) if (w.split(c).length - 1 < need[c]) return false;
+        return true;
+    });
+}
+
 // Parse a pasted Wordle share block. Each line with five color squares
 // becomes one row. A 5-letter word on the same line (e.g. "CRANE 🟩⬛🟨⬛⬛")
 // is kept; otherwise word is null and the player types it later.

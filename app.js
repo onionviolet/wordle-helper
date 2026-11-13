@@ -1,5 +1,5 @@
 import { COLLECTION } from './data.js';
-import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, hardLegal, parseShare } from './logic.js';
+import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, hardLegal, quickFilter, parseShare } from './logic.js';
 
 // data.js holds the original 2,309 answer words first, then the extra
 // allowed guesses. NYT has edited answers since 2022, so the extras still
@@ -32,11 +32,21 @@ function load() {
     return [];
 }
 function loadOpts() {
-    try { const o = JSON.parse(localStorage.getItem(OPTS_KEY) || '{}'); return { hard: !!o.hard, hide: !!o.hide }; } catch (_) { return { hard: false, hide: false }; }
+    try { const o = JSON.parse(localStorage.getItem(OPTS_KEY) || '{}'); const letters = v => (typeof v === 'string' ? v : '').toLowerCase().replace(/[^a-z]/g, ''); return { hard: !!o.hard, hide: !!o.hide, present: letters(o.present).slice(0, 5), absent: letters(o.absent) }; } catch (_) { return { hard: false, hide: false, present: '', absent: '' }; }
 }
 function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(rows)); localStorage.setItem(OPTS_KEY, JSON.stringify(opts)); } catch (_) { /* ignore */ }
 }
+
+// Everything known so far: the guess rows plus the Present letter box.
+function known() {
+    const k = knowledge(played());
+    const need = {};
+    for (const c of opts.present) need[c] = (need[c] || 0) + 1;
+    for (const c in need) { k.present.add(c); k.min[c] = Math.max(k.min[c] || 0, need[c]); }
+    return k;
+}
+const hasClues = () => played().length || opts.present || opts.absent;
 
 // Pre-color a new guess with anything already proven, so the player
 // usually only has to tap the new information.
@@ -101,17 +111,17 @@ function wordHtml(w, k) {
 }
 
 function renderResults() {
-    const k = knowledge(played());
+    const k = known();
     cancelBest();
     $('best').innerHTML = '';
 
-    if (!played().length) {
+    if (!hasClues()) {
         $('summary').innerHTML = `<h2>Strong first guesses</h2><p>${ALL.length.toLocaleString()} words in the list, ${ANSWER_COUNT.toLocaleString()} of them past or likely answers.</p>`;
         $('results').innerHTML = FIRST_ENTRY.map(w => wordHtml(w, k)).join('');
         return;
     }
 
-    const cands = filterCandidates(ALL, played());
+    const cands = quickFilter(filterCandidates(ALL, played()), opts.present, opts.absent, knowledge(played()).present);
     const likely = rankByFrequency(cands.filter(w => ANSWERS.has(w)));
     const other = rankByFrequency(cands.filter(w => !ANSWERS.has(w)));
 
@@ -208,7 +218,22 @@ for (const key of ['hard', 'hide']) {
     box.addEventListener('change', () => { opts[key] = box.checked; update(); });
 }
 
-$('clear').addEventListener('click', () => { rows = []; $('guess-msg').textContent = ''; update(); });
+for (const key of ['present', 'absent']) {
+    const box = $('input-' + key);
+    box.value = opts[key];
+    box.addEventListener('input', () => {
+        const clean = box.value.replace(/[^a-zA-Z]/g, '').slice(0, key === 'present' ? 5 : 26);
+        if (clean !== box.value) box.value = clean;
+        opts[key] = clean.toLowerCase();
+        update();
+    });
+}
+
+$('clear').addEventListener('click', () => {
+    rows = []; opts.present = opts.absent = '';
+    $('input-present').value = $('input-absent').value = '';
+    $('guess-msg').textContent = ''; update();
+});
 
 $('rows').addEventListener('click', e => {
     const t = e.target.closest('button');
