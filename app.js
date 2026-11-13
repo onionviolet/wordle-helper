@@ -1,5 +1,5 @@
 import { COLLECTION } from './data.js';
-import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, hardLegal, quickFilter } from './logic.js';
+import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, hardLegal, quickFilter } from './logic.js?v=5';
 
 // data.js holds the original 2,309 answer words first, then the extra
 // allowed guesses. NYT has edited answers since 2022, so the extras still
@@ -175,7 +175,7 @@ function requestBest(targets, k) {
     };
     $('best').innerHTML = '<p class="msg">Working out the best next guess...</p>';
     try {
-        if (!worker) worker = new Worker('./worker.js', { type: 'module' });
+        if (!worker) worker = new Worker('./worker.js?v=5', { type: 'module' });
         workerBusy = true;
         worker.onmessage = e => {
             if (e.data.id !== id || id !== jobId) return;

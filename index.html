@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=5">
 
 
     <link rel="apple-touch-icon" sizes="180x180" href="./images/apple-touch-icon.png">
@@ -140,6 +140,7 @@
 
 
 
-    <script type="module" src="./app.js"></script>
+    <!-- Bump every ?v= (here, app.js, worker.js) together on each release so browsers never mix old and new files. -->
+    <script type="module" src="./app.js?v=5"></script>
 </body>
 </html>
