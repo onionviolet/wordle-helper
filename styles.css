@@ -365,3 +365,8 @@ header{ border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--cor
 .group.common .word i{ background-color: var(--common); }
 .group.common .word i.incSty{ background-color: var(--present); }
 .group.common .word i.crtSty{ background-color: var(--correct); }
+#side h2.h-win, #side h3.h-win{ border-left-color: var(--correct); color: #6aaa64; }
+.group.win{ background: #538d4e24; border-radius: 8px; padding: 4px 2px 8px; margin-top: 6px; }
+.group.win .word i{ background-color: #2f6f3a; }
+.group.win .word i.incSty{ background-color: var(--present); }
+.group.win .word i.crtSty{ background-color: var(--correct); }

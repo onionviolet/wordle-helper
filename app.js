@@ -1,5 +1,5 @@
-import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=7';
-import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, hardLegal, quickFilter } from './logic.js?v=7';
+import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=8';
+import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestSplit, hardLegal, quickFilter } from './logic.js?v=8';
 
 // data.js lists every valid guess in three tiers: the 2,309 classic answers,
 // then other common words, then rare ones. NYT picks answers outside the
@@ -199,22 +199,27 @@ function cancelBest() {
 function requestBest(targets, k) {
     const id = jobId;
     const weights = targets.map(weight);
-    const allRare = targets.every(w => TIER.get(w) === 2);
     const pool = opts.hard ? ALL.filter(w => hardLegal(w, k)) : null;
-    const show = best => {
+    const item = (b, note) => `<span class="best-item">${wordHtml(b.word, k)}<small>${note} · ~${b.expLeft.toFixed(1)} left</small></span>`;
+    const show = ({ answers, probes }) => {
         if (id !== jobId) return;
-        $('best').innerHTML = `<h3 class="h-best">Best next guess <span>(${opts.hard ? 'hard mode, ' : ''}splits the ${targets.length.toLocaleString()} remaining words, weighted toward likely answers)</span></h3>
-            <div class="group best">${best.map(b => `<span class="best-item">${wordHtml(b.word, k)}<small>${b.isCandidate && (TIER.get(b.word) < 2 || allRare) ? '<em>could win</em> · ' : ''}~${b.expLeft.toFixed(1)} left</small></span>`).join('')}</div>`;
+        const mode = opts.hard ? 'hard mode, ' : '';
+        let html = '';
+        if (answers.length) html += `<h3 class="h-win">Best guess that could be the answer <span>(${mode}chance it is right, and words left if not)</span></h3>
+            <div class="group win">${answers.map(b => item(b, `<em>${Math.max(1, Math.round(b.win * 100))}% to win</em>`)).join('')}</div>`;
+        if (probes.length) html += `<h3 class="h-best">Best narrowing guess <span>(${mode}not the answer: tests new letters to split the ${targets.length.toLocaleString()} words left)</span></h3>
+            <div class="group best">${probes.map(b => item(b, 'cannot win')).join('')}</div>`;
+        $('best').innerHTML = html;
     };
     const inline = () => {
         workerBusy = false; worker = null;
         if (id !== jobId) return;
         if (targets.length > BEST_MAX_INLINE) { $('best').innerHTML = ''; return; }
-        bestTimer = setTimeout(() => show(bestGuesses(pool || ALL, targets, 5, null, weights)), 30);
+        bestTimer = setTimeout(() => show(bestSplit(pool || ALL, targets, 5, null, weights)), 30);
     };
     $('best').innerHTML = '<p class="msg">Working out the best next guess...</p>';
     try {
-        if (!worker) worker = new Worker('./worker.js?v=7', { type: 'module' });
+        if (!worker) worker = new Worker('./worker.js?v=8', { type: 'module' });
         workerBusy = true;
         worker.onmessage = e => {
             if (e.data.id !== id || id !== jobId) return;

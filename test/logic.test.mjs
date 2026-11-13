@@ -108,3 +108,16 @@ t('weights steer the best guess toward likely words', () => {
   assert.ok(even.expLeft >= 1 && tilted.expLeft >= 1);
 });
 console.log(n, 'tests passed');
+
+import { bestSplit } from '../logic.js';
+t('answer guesses and narrowing guesses are kept apart', () => {
+  const rows = [{ word: 'salet', colors: p('00010') }, { word: 'drone', colors: p('00102') }, { word: 'voice', colors: p('02102') }];
+  const c = filterCandidates(COLLECTION, rows);
+  const w = c.map(x => (COLLECTION.indexOf(x) < ANSWER_COUNT + COMMON_COUNT ? 0.2 : 0.01));
+  const { answers, probes } = bestSplit(COLLECTION, c, 5, null, w);
+  assert.ok(answers.length && answers.every(a => c.includes(a.word) && a.word.endsWith('e')), answers.map(a => a.word).join(' '));
+  assert.ok(answers.every(a => ['bowie', 'homie', 'moxie', 'bogie'].includes(a.word)));
+  assert.ok(probes.every(x => !c.includes(x.word) && x.expLeft < answers[0].expLeft));
+  console.log('    answers:', answers.map(a => `${a.word} ${(a.win * 100).toFixed(0)}% ~${a.expLeft.toFixed(1)}`).join(', '), '| probes:', probes.map(x => `${x.word} ~${x.expLeft.toFixed(1)}`).join(', '));
+});
+console.log(n, 'tests passed');

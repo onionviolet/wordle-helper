@@ -70,7 +70,7 @@ export function rankByFrequency(words) {
 // |pool| x |targets|, so the inner loop works on letter codes and allocates
 // nothing. `onProgress` gets a 0..1 fraction now and then (used by the worker).
 const POW3 = [1, 3, 9, 27, 81];
-export function bestGuesses(pool, targets, top = 5, onProgress, weights) {
+function rankGuesses(pool, targets, onProgress, weights) {
     const n = targets.length;
     const W = new Float64Array(n);
     let total = 0;
@@ -110,11 +110,29 @@ export function bestGuesses(pool, targets, top = 5, onProgress, weights) {
         }
         // A candidate guess can win outright; give it an edge by its own odds.
         const win = share.get(word) || 0;
-        results.push({ word, bits: h, expLeft, isCandidate: share.has(word), key: h + win });
+        results.push({ word, bits: h, expLeft, isCandidate: share.has(word), win, key: h + win });
         if (onProgress && pi % 1000 === 999) onProgress(pi / pool.length);
     }
     results.sort((a, b) => b.key - a.key);
-    return results.slice(0, top);
+    return results;
+}
+
+export function bestGuesses(pool, targets, top = 5, onProgress, weights) {
+    return rankGuesses(pool, targets, onProgress, weights).slice(0, top);
+}
+
+// The same ranking, split by purpose. `answers` are guesses that could be
+// today's word (only the likeliest class of candidates, so obscure words do
+// not crowd in). `probes` cannot be the answer; they spend a turn on fresh
+// letters to tell the remaining words apart, and are only returned when
+// they narrow things down better than the best answer guess does.
+export function bestSplit(pool, targets, top = 5, onProgress, weights) {
+    const ranked = rankGuesses(pool, targets, onProgress, weights);
+    const maxWin = ranked.reduce((m, r) => Math.max(m, r.win), 0);
+    const answers = ranked.filter(r => r.isCandidate && r.win >= maxWin / 2).slice(0, top);
+    const bar = answers.length ? answers[0].expLeft : Infinity;
+    const probes = ranked.filter(r => !r.isCandidate && r.expLeft < bar - 0.05).slice(0, top);
+    return { answers, probes };
 }
 
 // Wordle hard mode: a guess must keep every green in place and reuse every
