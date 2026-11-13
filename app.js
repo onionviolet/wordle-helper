@@ -1,5 +1,5 @@
 import { COLLECTION } from './data.js';
-import { GRAY, YELLOW, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, parseShare } from './logic.js';
+import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestGuesses, hardLegal, parseShare } from './logic.js';
 
 // data.js holds the original 2,309 answer words first, then the extra
 // allowed guesses. NYT has edited answers since 2022, so the extras still
@@ -9,8 +9,9 @@ const ALL = [...new Set(COLLECTION)];
 const ANSWERS = new Set(ALL.slice(0, ANSWER_COUNT));
 const VALID = new Set(ALL);
 const SHOW_MAX = 500;
-const BEST_MAX_TARGETS = 250;
+const BEST_MAX_INLINE = 250; // main-thread fallback limit when workers are unavailable
 const STORE_KEY = 'wordle-helper-rows-v1';
+const OPTS_KEY = 'wordle-helper-opts-v1';
 
 const FIRST_ENTRY = ['salet', 'crane', 'slate', 'trace', 'crate', 'raise', 'stare', 'arose', 'audio', 'roate'];
 
@@ -19,7 +20,8 @@ const input = $('guess-input');
 const COLOR_CLASS = ['gray', 'yellow', 'green'];
 
 let rows = load();
-let bestTimer = null;
+let opts = loadOpts();
+let bestTimer = null, worker = null, workerBusy = false, jobId = 0;
 const played = () => rows.filter(r => r.word);
 
 function load() {
@@ -29,8 +31,11 @@ function load() {
     } catch (_) { /* storage blocked */ }
     return [];
 }
+function loadOpts() {
+    try { const o = JSON.parse(localStorage.getItem(OPTS_KEY) || '{}'); return { hard: !!o.hard, hide: !!o.hide }; } catch (_) { return { hard: false, hide: false }; }
+}
 function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(rows)); } catch (_) { /* ignore */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(rows)); localStorage.setItem(OPTS_KEY, JSON.stringify(opts)); } catch (_) { /* ignore */ }
 }
 
 // Pre-color a new guess with anything already proven, so the player
@@ -53,11 +58,24 @@ function addGuess(raw) {
     update();
 }
 
+// How many likely answers were still possible after each guess, so the
+// player can see how much every guess narrowed things down.
+function leftAfterEach() {
+    let cur = ALL.filter(w => ANSWERS.has(w)), any = ALL, out = [];
+    for (const r of rows) {
+        if (!r.word) { out.push(null); continue; }
+        cur = filterCandidates(cur, [r]); any = filterCandidates(any, [r]);
+        out.push(cur.length || any.length);
+    }
+    return out;
+}
+
 function renderRows() {
+    const left = leftAfterEach();
     $('rows').innerHTML = rows.map((r, ri) => `
         <div class="row">
             ${r.colors.map((col, i) => { const c = r.word ? r.word[i] : ''; return `<button type="button" class="tile ${COLOR_CLASS[col]}${r.word ? '' : ' pending'}" data-r="${ri}" data-i="${i}" aria-label="${c || 'blank'} ${COLOR_CLASS[col]}">${c}</button>`; }).join('')}
-            ${r.word ? '' : '<span class="hint">type this word</span>'}
+            ${r.word ? `<span class="hint left">${left[ri].toLocaleString()} left</span>` : '<span class="hint">type this word</span>'}
             <button type="button" class="remove" data-r="${ri}" aria-label="Remove guess">×</button>
         </div>`).join('');
 }
@@ -84,7 +102,7 @@ function wordHtml(w, k) {
 
 function renderResults() {
     const k = knowledge(played());
-    clearTimeout(bestTimer);
+    cancelBest();
     $('best').innerHTML = '';
 
     if (!played().length) {
@@ -107,24 +125,55 @@ function renderResults() {
         <p>${likely.length} from the answer list, ${other.length} other valid words. Sorted by common letters.</p>`;
 
     let html = '';
-    if (likely.length) html += `<h3>Likely answers</h3><div class="group">${likely.slice(0, SHOW_MAX).map(w => wordHtml(w, k)).join('')}</div>`;
-    if (other.length) {
-        const room = Math.max(SHOW_MAX - likely.length, 60);
-        html += `<h3>Other valid words</h3><div class="group dim">${other.slice(0, room).map(w => wordHtml(w, k)).join('')}</div>`;
-        if (other.length > room) html += `<p class="msg">${other.length - room} more not shown.</p>`;
+    if (opts.hide) html = '<p class="msg">Word list hidden. Untick "Hints only" to see it.</p>';
+    else {
+        if (likely.length) html += `<h3>Likely answers</h3><div class="group">${likely.slice(0, SHOW_MAX).map(w => wordHtml(w, k)).join('')}</div>`;
+        if (other.length) {
+            const room = Math.max(SHOW_MAX - likely.length, 60);
+            html += `<h3>Other valid words</h3><div class="group dim">${other.slice(0, room).map(w => wordHtml(w, k)).join('')}</div>`;
+            if (other.length > room) html += `<p class="msg">${other.length - room} more not shown.</p>`;
+        }
     }
     $('results').innerHTML = html;
 
     // Best next guess: entropy over the likely answers (or everything left).
     const targets = likely.length ? likely : other;
-    if (targets.length > 2 && targets.length <= BEST_MAX_TARGETS && played().length < 6) {
-        $('best').innerHTML = '<p class="msg">Working out the best next guess...</p>';
-        bestTimer = setTimeout(() => {
-            const best = bestGuesses(ALL, targets, 5);
-            $('best').innerHTML = `<h3>Best next guess <span>(splits the ${targets.length} likely words most evenly)</span></h3>
-                <div class="group">${best.map(b => `<span class="best-item">${wordHtml(b.word, k)}<small>${b.isCandidate ? 'could win · ' : ''}~${b.expLeft.toFixed(1)} left</small></span>`).join('')}</div>`;
-        }, 30);
-    }
+    if (targets.length > 2 && played().length < 6) requestBest(targets, k);
+}
+
+function cancelBest() {
+    jobId++;
+    clearTimeout(bestTimer);
+    if (worker && workerBusy) { worker.terminate(); worker = null; workerBusy = false; }
+}
+
+// Ranks every valid word (or every hard-mode-legal word) in a worker.
+function requestBest(targets, k) {
+    const id = jobId;
+    const pool = opts.hard ? ALL.filter(w => hardLegal(w, k)) : null;
+    const show = best => {
+        if (id !== jobId) return;
+        $('best').innerHTML = `<h3>Best next guess <span>(${opts.hard ? 'hard mode, ' : ''}splits the ${targets.length.toLocaleString()} likely words most evenly)</span></h3>
+            <div class="group">${best.map(b => `<span class="best-item">${wordHtml(b.word, k)}<small>${b.isCandidate ? 'could win · ' : ''}~${b.expLeft.toFixed(1)} left</small></span>`).join('')}</div>`;
+    };
+    const inline = () => {
+        workerBusy = false; worker = null;
+        if (id !== jobId) return;
+        if (targets.length > BEST_MAX_INLINE) { $('best').innerHTML = ''; return; }
+        bestTimer = setTimeout(() => show(bestGuesses(pool || ALL, targets, 5)), 30);
+    };
+    $('best').innerHTML = '<p class="msg">Working out the best next guess...</p>';
+    try {
+        if (!worker) worker = new Worker('./worker.js', { type: 'module' });
+        workerBusy = true;
+        worker.onmessage = e => {
+            if (e.data.id !== id || id !== jobId) return;
+            if (e.data.best) { workerBusy = false; show(e.data.best); }
+            else $('best').innerHTML = `<p class="msg">Working out the best next guess... ${Math.round(e.data.progress * 100)}%</p>`;
+        };
+        worker.onerror = e => { e.preventDefault(); inline(); };
+        worker.postMessage({ id, targets, pool, top: 5 });
+    } catch (_) { inline(); }
 }
 
 function update() {
@@ -152,6 +201,12 @@ $('share-input').addEventListener('input', e => {
     update();
     if (missing) input.focus();
 });
+
+for (const key of ['hard', 'hide']) {
+    const box = $('opt-' + key);
+    box.checked = opts[key];
+    box.addEventListener('change', () => { opts[key] = box.checked; update(); });
+}
 
 $('clear').addEventListener('click', () => { rows = []; $('guess-msg').textContent = ''; update(); });
 

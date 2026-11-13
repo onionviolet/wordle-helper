@@ -64,16 +64,36 @@ export function rankByFrequency(words) {
 }
 
 // Best next guesses by expected information (entropy of the color pattern
-// over the remaining candidates). Cost is |pool| x |targets|, so callers
-// should keep targets small.
-export function bestGuesses(pool, targets, top = 5) {
+// over the remaining candidates). Cost is |pool| x |targets|, so the inner
+// loop works on letter codes and allocates nothing. `onProgress` gets a
+// 0..1 fraction now and then (used by the worker).
+const POW3 = [1, 3, 9, 27, 81];
+export function bestGuesses(pool, targets, top = 5, onProgress) {
     const n = targets.length;
     const targetSet = new Set(targets);
+    const T = new Uint8Array(n * 5);
+    for (let t = 0; t < n; t++) for (let i = 0; i < 5; i++) T[t * 5 + i] = targets[t].charCodeAt(i) - 97;
     const counts = new Uint16Array(243);
+    const left = new Int8Array(26);
+    const g = new Uint8Array(5);
     const results = [];
-    for (const g of pool) {
+    for (let pi = 0; pi < pool.length; pi++) {
+        const word = pool[pi];
+        for (let i = 0; i < 5; i++) g[i] = word.charCodeAt(i) - 97;
         counts.fill(0);
-        for (const t of targets) counts[scoreCode(g, t)]++;
+        for (let o = 0; o < n * 5; o += 5) {
+            let code = 0;
+            for (let i = 0; i < 5; i++) {
+                const a = T[o + i];
+                if (g[i] === a) code += 2 * POW3[i]; else left[a]++;
+            }
+            for (let i = 0; i < 5; i++) {
+                const c = g[i];
+                if (c !== T[o + i] && left[c] > 0) { code += POW3[i]; left[c]--; }
+            }
+            for (let i = 0; i < 5; i++) left[T[o + i]] = 0;
+            counts[code]++;
+        }
         let h = 0, expLeft = 0;
         for (let k = 0; k < 243; k++) {
             const c = counts[k];
@@ -83,11 +103,20 @@ export function bestGuesses(pool, targets, top = 5) {
             expLeft += c * p;
         }
         // A candidate guess can win outright; give it a small edge on ties.
-        const bonus = targetSet.has(g) ? 1 / n : 0;
-        results.push({ word: g, bits: h, expLeft, isCandidate: targetSet.has(g), key: h + bonus });
+        const isCandidate = targetSet.has(word);
+        results.push({ word, bits: h, expLeft, isCandidate, key: h + (isCandidate ? 1 / n : 0) });
+        if (onProgress && pi % 1000 === 999) onProgress(pi / pool.length);
     }
     results.sort((a, b) => b.key - a.key);
     return results.slice(0, top);
+}
+
+// Wordle hard mode: a guess must keep every green in place and reuse every
+// revealed letter (as many copies as have been lit at once).
+export function hardLegal(word, k) {
+    for (let i = 0; i < 5; i++) if (k.green[i] && word[i] !== k.green[i]) return false;
+    for (const c in k.min) if (word.split(c).length - 1 < k.min[c]) return false;
+    return true;
 }
 
 // Parse a pasted Wordle share block. Each line with five color squares

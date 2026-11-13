@@ -60,3 +60,26 @@ t('parses high contrast and inline words', () => {
   assert.deepEqual(r, [{ word: 'crane', colors: p('20100') }]);
 });
 console.log(n, 'tests passed');
+
+import { hardLegal, scoreCode } from '../logic.js';
+t('fast bestGuesses matches score() bucket by bucket', () => {
+  const targets = W.slice(0, 400);
+  for (const g of ['geese', 'lolly', 'crane', 'eerie', 'mamma']) {
+    const counts = {}; for (const a of targets) { const c = scoreCode(g, a); counts[c] = (counts[c] || 0) + 1; }
+    const exp = Object.values(counts).reduce((s, c) => s + c * c / targets.length, 0);
+    const got = bestGuesses([g], targets, 1)[0].expLeft;
+    assert.ok(Math.abs(exp - got) < 1e-9, g);
+  }
+});
+t('hard mode keeps greens and reuses lit letters', () => {
+  const k = knowledge([row('geese', 'those')]);
+  assert.ok(hardLegal('those', k)); assert.ok(hardLegal('these', k));
+  assert.ok(!hardLegal('crank', k)); assert.ok(!hardLegal('eager', k));
+  const k2 = knowledge([row('eerie', 'sheep')]);
+  assert.ok(hardLegal('sheep', k2)); assert.ok(!hardLegal('crane', k2));
+});
+t('full answer list search stays quick', () => {
+  const t0 = Date.now(); const b = bestGuesses(W, W.slice(0, 2309), 3);
+  console.log('   ', Date.now() - t0, 'ms, top:', b.map(x => x.word).join(', '));
+});
+console.log(n, 'tests passed');
