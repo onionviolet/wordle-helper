@@ -72,9 +72,9 @@ console.log(n, 'tests passed');
 
 import { quickFilter } from '../logic.js';
 t('present and absent boxes filter the list', () => {
-  const c = quickFilter(W, 'ee', 'rst');
+  const c = quickFilter(W, 'ea', 'rst');
   assert.ok(c.includes('geese') === false && c.includes('eagle'));
-  assert.ok(c.every(w => w.split('e').length - 1 >= 2 && !/[rst]/.test(w)));
+  assert.ok(c.every(w => w.includes('e') && w.includes('a') && !/[rst]/.test(w)));
   assert.ok(quickFilter(W, 'a', 'a').every(w => w.includes('a')));
   assert.ok(quickFilter(W, '', 'a', new Set(['a'])).length === W.length);
 });

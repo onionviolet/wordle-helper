@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=6">
 
 
     <link rel="apple-touch-icon" sizes="180x180" href="./images/apple-touch-icon.png">
@@ -82,7 +82,7 @@
         <form id="board" autocomplete="off" onsubmit="return false">
             <div class="form-group">
                 <h1>Find the Wordle</h1>
-                <p>Type the letters you know for a quick filter, or enter each guess and tap its tiles until the colors match the game for exact results.</p>
+                <p>Enter each guess and tap its tiles until the colors match the game. The letter boxes fill in from your guesses, and you can type extra letters into them.</p>
             </div>
 
             <div class="form-group k-correct">
@@ -94,7 +94,7 @@
 
             <div class="form-group k-present">
                 <label for="input-present">Present <span>(Letters anywhere in word but not in correct position)</span></label>
-                <input id="input-present" maxlength="5" placeholder="Type present letters....">
+                <input id="input-present" placeholder="Type present letters....">
             </div>
 
             <div class="form-group k-absent">
@@ -141,6 +141,6 @@
 
 
     <!-- Bump every ?v= (here, app.js, worker.js) together on each release so browsers never mix old and new files. -->
-    <script type="module" src="./app.js?v=5"></script>
+    <script type="module" src="./app.js?v=6"></script>
 </body>
 </html>

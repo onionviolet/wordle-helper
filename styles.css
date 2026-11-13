@@ -358,3 +358,4 @@ header{ border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--cor
 .group .word i.incSty{ background-color: var(--present); }
 .group .word i.crtSty{ background-color: var(--correct); }
 .best-item small em{ font-style: normal; font-weight: bold; color: var(--few); }
+.c-warn{ color: var(--many); }

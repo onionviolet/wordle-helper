@@ -120,13 +120,12 @@ export function hardLegal(word, k) {
 }
 
 // Quick letter boxes, for filtering without entering a whole guess.
-// `present`: letters the word must contain (typing a letter twice asks for
-// two copies). `absent`: letters the word must not contain; a letter that
+// `present`: letters the word must contain. `absent`: letters the word must not contain; a letter that
 // is also known to be in the word is ignored there rather than trusted.
 // `correct`: five slots, each '' or the letter fixed at that position.
 export function quickFilter(words, present, absent, lit = new Set(), correct = []) {
     const need = {};
-    for (const c of present) need[c] = (need[c] || 0) + 1;
+    for (const c of present) need[c] = 1;
     const fixed = [];
     for (let i = 0; i < 5; i++) if (correct[i]) fixed.push([i, correct[i]]);
     const banned = [...new Set(absent)].filter(c => !need[c] && !lit.has(c) && !correct.includes(c));
