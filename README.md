@@ -8,9 +8,9 @@ Fork of [vineethtrv/wordle-helper](https://github.com/vineethtrv/wordle-helper) 
 - **Best next guess, always on:** after every guess it ranks every valid word by how evenly it splits the likely answers (expected words left). It runs in a web worker, so it works with the whole answer list still in play.
 - **Hard mode** toggle: only suggests guesses that keep every green and reuse every revealed letter.
 - **Hints only** toggle: hides the word list and keeps the count and best guess, for help without the answer.
-- **Present and Absent boxes** from the original are back at the top for a quick filter without entering whole guesses. They combine with the guess rows.
+- **Correct, Present and Absent boxes** from the original sit at the top for a quick filter without entering whole guesses. They combine with the guess rows.
+- Color coding: purple for best guesses, blue for likely answers, slate for other valid words, and green, yellow or red counts as the list shrinks.
 - Each guess row shows how many likely answers were left after it.
-- **Paste your share grid** (normal or high-contrast squares). The colors fill in, and you type each row's word. Lines like `CRANE 🟩⬛🟨⬛⬛` fill in the word too.
 - Tap any suggested word to add it as a guess. Guesses persist in the browser until cleared.
 - Fixed result highlighting, which colored a letter green at any position.
 

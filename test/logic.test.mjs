@@ -47,20 +47,6 @@ t('bestGuesses runs fast on a small set', () => {
 });
 console.log(n, 'tests passed');
 
-import { parseShare } from '../logic.js';
-t('parses a normal share block', () => {
-  const r = parseShare('Wordle 1,606 4/6\n\n⬛🟨⬛⬛⬛\n⬜⬜🟩🟨⬜\n🟩🟩🟩⬛🟩\n🟩🟩🟩🟩🟩');
-  assert.equal(r.length, 4);
-  assert.deepEqual(r[0].colors, p('01000'));
-  assert.deepEqual(r[1].colors, p('00210'));
-  assert.equal(r[0].word, null);
-});
-t('parses high contrast and inline words', () => {
-  const r = parseShare('crane 🟧⬛🟦⬛⬛\nnotes here');
-  assert.deepEqual(r, [{ word: 'crane', colors: p('20100') }]);
-});
-console.log(n, 'tests passed');
-
 import { hardLegal, scoreCode } from '../logic.js';
 t('fast bestGuesses matches score() bucket by bucket', () => {
   const targets = W.slice(0, 400);
@@ -91,5 +77,12 @@ t('present and absent boxes filter the list', () => {
   assert.ok(c.every(w => w.split('e').length - 1 >= 2 && !/[rst]/.test(w)));
   assert.ok(quickFilter(W, 'a', 'a').every(w => w.includes('a')));
   assert.ok(quickFilter(W, '', 'a', new Set(['a'])).length === W.length);
+});
+console.log(n, 'tests passed');
+
+t('correct boxes pin letters to positions', () => {
+  const c = quickFilter(W, '', 's', new Set(), ['s', '', 'a', '', 'e']);
+  assert.ok(c.includes('shame') && c.length > 3);
+  assert.ok(c.every(w => w[0] === 's' && w[2] === 'a' && w[4] === 'e'));
 });
 console.log(n, 'tests passed');

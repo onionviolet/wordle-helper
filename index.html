@@ -85,28 +85,30 @@
                 <p>Type the letters you know for a quick filter, or enter each guess and tap its tiles until the colors match the game for exact results.</p>
             </div>
 
-            <div class="form-group">
+            <div class="form-group k-correct">
+                <label for="correct-0">Correct <span>(Letters in the correct position)</span></label>
+                <div class="form-flex" id="form-correct">
+                    <input id="correct-0" maxlength="1" aria-label="Letter 1"><input maxlength="1" aria-label="Letter 2"><input maxlength="1" aria-label="Letter 3"><input maxlength="1" aria-label="Letter 4"><input maxlength="1" aria-label="Letter 5">
+                </div>
+            </div>
+
+            <div class="form-group k-present">
                 <label for="input-present">Present <span>(Letters anywhere in word but not in correct position)</span></label>
                 <input id="input-present" maxlength="5" placeholder="Type present letters....">
             </div>
 
-            <div class="form-group">
+            <div class="form-group k-absent">
                 <label for="input-absent">Absent <span>(Letters can be excluded from the word)</span></label>
                 <input id="input-absent" placeholder="Type excluded letters..">
             </div>
 
-            <div class="form-group">
+            <div class="form-group k-guess">
                 <label for="guess-input">Add a guess <span>(press Enter, or tap a suggested word)</span></label>
                 <div class="form-flex">
                     <input id="guess-input" maxlength="5" placeholder="Type a guess...">
                     <button type="button" id="add-guess">Add</button>
                 </div>
                 <p id="guess-msg" class="msg"></p>
-            </div>
-
-            <div class="form-group">
-                <label for="share-input">Or paste your share grid <span>(colors fill in; type each row's word)</span></label>
-                <textarea id="share-input" rows="2" placeholder="Wordle 1,234 3/6&#10;⬛🟨⬛⬛⬛&#10;🟩⬛🟩🟨⬛"></textarea>
             </div>
 
             <div class="form-group">

@@ -123,30 +123,18 @@ export function hardLegal(word, k) {
 // `present`: letters the word must contain (typing a letter twice asks for
 // two copies). `absent`: letters the word must not contain; a letter that
 // is also known to be in the word is ignored there rather than trusted.
-export function quickFilter(words, present, absent, lit = new Set()) {
+// `correct`: five slots, each '' or the letter fixed at that position.
+export function quickFilter(words, present, absent, lit = new Set(), correct = []) {
     const need = {};
     for (const c of present) need[c] = (need[c] || 0) + 1;
-    const banned = [...new Set(absent)].filter(c => !need[c] && !lit.has(c));
-    if (!banned.length && !present.length) return words;
+    const fixed = [];
+    for (let i = 0; i < 5; i++) if (correct[i]) fixed.push([i, correct[i]]);
+    const banned = [...new Set(absent)].filter(c => !need[c] && !lit.has(c) && !correct.includes(c));
+    if (!banned.length && !present.length && !fixed.length) return words;
     return words.filter(w => {
+        for (const [i, c] of fixed) if (w[i] !== c) return false;
         for (const c of banned) if (w.includes(c)) return false;
         for (const c in need) if (w.split(c).length - 1 < need[c]) return false;
         return true;
     });
-}
-
-// Parse a pasted Wordle share block. Each line with five color squares
-// becomes one row. A 5-letter word on the same line (e.g. "CRANE 🟩⬛🟨⬛⬛")
-// is kept; otherwise word is null and the player types it later.
-// Supports normal (green/yellow) and high-contrast (orange/blue) squares.
-const SQUARE = { '🟩': GREEN, '🟧': GREEN, '🟨': YELLOW, '🟦': YELLOW, '⬛': GRAY, '⬜': GRAY };
-export function parseShare(text) {
-    const out = [];
-    for (const line of String(text).split(/\r?\n/)) {
-        const colors = Array.from(line).filter(ch => ch in SQUARE).map(ch => SQUARE[ch]);
-        if (colors.length !== 5) continue;
-        const m = line.match(/\b[a-zA-Z]{5}\b/);
-        out.push({ word: m ? m[0].toLowerCase() : null, colors });
-    }
-    return out;
 }
