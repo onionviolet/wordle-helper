@@ -53,16 +53,6 @@ body{
 }
 
 
-article{
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 50px;
-    overflow: hidden;
-    opacity: 0;
-}
-
 header{
     box-shadow: 0 0px 12px var(--header-shadow);
     padding: 10px;
@@ -370,3 +360,56 @@ header{ border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--cor
 .group.win .word i{ background-color: #2f6f3a; }
 .group.win .word i.incSty{ background-color: var(--present); }
 .group.win .word i.crtSty{ background-color: var(--correct); }
+
+/* v9: pending rows, keyboard, quick filter, phone peek, share, about */
+code{ background: #0003; padding: 1px 5px; border-radius: 4px; font-size: 0.95em; }
+.intro p{ font-size: 14px; }
+.row.pending .tile{ outline: 2px dashed #ffffff80; outline-offset: -4px; }
+.done{
+    border: 0; background: var(--likely); color: #fff; font-weight: bold;
+    font-size: 13px; padding: 6px 10px; border-radius: 10px; cursor: pointer; margin-left: 2px;
+}
+.share{ display: flex; align-items: center; gap: 12px; margin: 6px 0; }
+.share .ghost{ margin: 0; }
+#keys{ user-select: none; }
+.krow{ display: flex; justify-content: center; gap: 4px; margin-bottom: 4px; }
+.key{
+    flex: 1 1 0; max-width: 38px; height: 42px; border: 0; border-radius: 4px;
+    background: #818384; color: #fff; font: bold 14px Arial, sans-serif; text-transform: uppercase;
+    cursor: pointer; padding: 0;
+}
+.key.wide{ max-width: 62px; flex-grow: 1.6; font-size: 12px; }
+.key.green{ background: var(--correct); }
+.key.yellow{ background: var(--present); }
+.key.gray{ background: var(--absent); color: #fff9; }
+#quick{ border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; }
+#quick summary{ cursor: pointer; font-weight: bold; font-size: 16px; }
+#quick summary span{ font-size: 13px; font-weight: normal; color: #818384; }
+#quick[open] summary{ margin-bottom: 10px; }
+#quick > div{ margin-bottom: 12px; }
+#peek{ display: none; }
+#peek .peek-count{ font-size: 18px; font-weight: bold; margin: 0 0 4px; }
+#peek .group{ margin-top: 4px; }
+#peek a{ color: var(--likely); }
+.best-item small + small{ margin-top: 0; }
+.about{ max-width: 760px; margin: 24px auto; padding: 0 16px; }
+.about h2{ font-size: 18px; margin: 0 0 6px; }
+.about p{ font-size: 14px; line-height: 1.5; color: #9aa3ad; }
+@media (max-width: 900px){
+    #peek{ display: block; }
+    #peek:empty{ display: none; }
+}
+@media (max-width: 480px){
+    form{ padding: 12px 16px; min-width: 0; }
+    .form-group{ max-width: 100%; }
+    .row{ gap: 4px; }
+    .tile{ width: 44px; height: 44px; font-size: 20px; }
+    #form-correct input{ width: 44px; height: 44px; font-size: 20px; }
+    .key{ height: 46px; }
+    .group .word{ margin: 6px; }
+    #side{ min-width: 0; }
+}
+@media (prefers-color-scheme: light){
+    input{ color: #fff; }
+    .about p{ color: #555; }
+}

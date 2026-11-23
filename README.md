@@ -12,6 +12,12 @@ Fork of [vineethtrv/wordle-helper](https://github.com/vineethtrv/wordle-helper) 
 - Color coding: purple for best guesses, blue for likely answers, slate for other valid words, and green, yellow or red counts as the list shrinks.
 - Each guess row shows how many likely answers were left after it.
 - Tap any suggested word to add it as a guess. Guesses persist in the browser until cleared.
+- **New guesses wait for Done.** A new row is marked pending until you finish coloring it, so the filter and search never run on half-entered colors. The search also waits for a short pause in tapping.
+- **Typed colors:** `crane 02100` (0 gray, 1 yellow, 2 green) or `crane bybgg` adds a guess with its colors in one step.
+- **On-screen keyboard** shows which letters are green, yellow, gray or untried, and types into the guess box.
+- **Phone layout:** the count and top picks appear right under your guesses; the Correct, Present and Absent boxes fold into a Quick filter section.
+- Suggestions show how many color groups each guess splits the words into, and a solved game offers a copyable emoji grid.
+- Past answers stay in the list on purpose: NYT has reused them since February 2026.
 - Fixed result highlighting, which colored a letter green at any position.
 
 Live: https://onionviolet.github.io/wordle-helper/

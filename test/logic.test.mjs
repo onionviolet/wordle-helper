@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { score, filterCandidates, knowledge, bestGuesses } from '../logic.js';
+import { score, filterCandidates, knowledge, bestGuesses, parseGuess } from '../logic.js';
 import { COLLECTION } from '../data.js';
 
 const W = [...new Set(COLLECTION)];
@@ -119,5 +119,17 @@ t('answer guesses and narrowing guesses are kept apart', () => {
   assert.ok(answers.every(a => ['bowie', 'homie', 'moxie', 'bogie'].includes(a.word)));
   assert.ok(probes.every(x => !c.includes(x.word) && x.expLeft < answers[0].expLeft));
   console.log('    answers:', answers.map(a => `${a.word} ${(a.win * 100).toFixed(0)}% ~${a.expLeft.toFixed(1)}`).join(', '), '| probes:', probes.map(x => `${x.word} ~${x.expLeft.toFixed(1)}`).join(', '));
+});
+t('parseGuess reads a bare word, digit colors and letter colors', () => {
+  assert.deepEqual(parseGuess(' Crane '), { word: 'crane', colors: null });
+  assert.deepEqual(parseGuess('crane 02100'), { word: 'crane', colors: [0, 2, 1, 0, 0] });
+  assert.deepEqual(parseGuess('crane02100'), { word: 'crane', colors: [0, 2, 1, 0, 0] });
+  assert.deepEqual(parseGuess('crane bygx.'), { word: 'crane', colors: [0, 1, 2, 0, 0] });
+  for (const bad of ['cran', 'cranes', 'crane 0210', 'crane 03100', 'cranebygxb', '']) assert.equal(parseGuess(bad), null, bad);
+});
+t('groups counts distinct color patterns', () => {
+  const targets = ['crane', 'crate', 'trace', 'react'];
+  const [b] = bestGuesses(['crane'], targets, 1);
+  assert.equal(b.groups, new Set(targets.map(a => score('crane', a).join(''))).size);
 });
 console.log(n, 'tests passed');

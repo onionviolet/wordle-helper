@@ -101,16 +101,18 @@ function rankGuesses(pool, targets, onProgress, weights) {
             counts[code]++; mass[code] += W[t];
         }
         // expLeft: how many words are still standing afterwards, on average.
-        let h = 0, expLeft = 0;
+        // groups: how many distinct color patterns this guess can show.
+        let h = 0, expLeft = 0, groups = 0;
         for (let k = 0; k < 243; k++) {
             if (!counts[k]) continue;
+            groups++;
             const p = mass[k] / total;
             if (p > 0) h -= p * Math.log2(p);
             expLeft += p * counts[k];
         }
         // A candidate guess can win outright; give it an edge by its own odds.
         const win = share.get(word) || 0;
-        results.push({ word, bits: h, expLeft, isCandidate: share.has(word), win, key: h + win });
+        results.push({ word, bits: h, expLeft, groups, isCandidate: share.has(word), win, key: h + win });
         if (onProgress && pi % 1000 === 999) onProgress(pi / pool.length);
     }
     results.sort((a, b) => b.key - a.key);
@@ -160,4 +162,16 @@ export function quickFilter(words, present, absent, lit = new Set(), correct = [
         for (const c in need) if (w.split(c).length - 1 < need[c]) return false;
         return true;
     });
+}
+
+// Parse what the player typed into the guess box: a word, optionally
+// followed by its colors. Digits need no space ("crane02100"); letter codes
+// do ("crane bybgg"). 0/b/x/./- = gray, 1/y = yellow, 2/g = green.
+// Returns { word, colors } (colors null when not given) or null.
+const CODE = { 0: 0, b: 0, x: 0, '.': 0, '-': 0, 1: 1, y: 1, 2: 2, g: 2 };
+export function parseGuess(raw) {
+    const m = String(raw || '').toLowerCase().trim().match(/^([a-z]{5})(?:\s*([0-2]{5})|\s+([bxyg.\-]{5}))?$/);
+    if (!m) return null;
+    const code = m[2] || m[3];
+    return { word: m[1], colors: code ? [...code].map(c => CODE[c]) : null };
 }
