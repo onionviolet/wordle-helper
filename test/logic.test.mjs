@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { score, filterCandidates, knowledge, bestGuesses, parseGuess } from '../logic.js';
+import { score, filterCandidates, suggestTileCorrection, knowledge, bestGuesses, parseGuess } from '../logic.js';
 import { COLLECTION } from '../data.js';
 
 const W = [...new Set(COLLECTION)];
@@ -131,5 +131,38 @@ t('groups counts distinct color patterns', () => {
   const targets = ['crane', 'crate', 'trace', 'react'];
   const [b] = bestGuesses(['crane'], targets, 1);
   assert.equal(b.groups, new Set(targets.map(a => score('crane', a).join(''))).size);
+});
+t('unmarked repeats allow either color until the tile is marked', () => {
+  const words = ['those', 'these', 'chose', 'crane'];
+  const partial = { word: 'geese', colors: [null, null, null, 2, 2] };
+  assert.deepEqual(filterCandidates(words, [partial]), ['those', 'these', 'chose']);
+  partial.colors[2] = 0;
+  assert.deepEqual(filterCandidates(words, [partial]), ['those', 'chose']);
+  assert.equal(knowledge([partial]).exact.e, undefined);
+  partial.colors[1] = 0;
+  assert.equal(knowledge([partial]).exact.e, 1);
+});
+t('a correction counts words matching every other marked and quick-filter clue', () => {
+  const words = ['those', 'these', 'chose', 'crane'];
+  const rows = [row('geese', 'those'), { word: 'crane', colors: [2, null, null, null, 2] }];
+  assert.deepEqual(filterCandidates(words, rows), ['chose']);
+  const opts = { present: 't' };
+  assert.deepEqual(suggestTileCorrection(words, rows, opts), { row: 1, tile: 0, color: 0, count: 1 });
+  assert.equal(suggestTileCorrection(words, rows, { present: 'j' }), null);
+  assert.equal(rows[1].colors[0], 2);
+});
+t('two-turn ranking counts weighted singleton patterns, including an outright win', () => {
+  const targets = ['homie', 'moxie', 'zowie', 'yowie', 'bowie'];
+  const weights = [2, 1, 1, 1, 5];
+  const pool = [...targets, 'womby'];
+  const { answers, probes } = bestSplit(pool, targets, 5, null, weights, 2);
+  assert.equal(answers.length, targets.length);
+  assert.equal(probes[0].word, 'womby');
+  for (const pick of [...answers, ...probes]) {
+    const patterns = targets.map(answer => scoreCode(pick.word, answer));
+    const uniqueWeight = weights.reduce((sum, w, i) => sum + (patterns.filter(p => p === patterns[i]).length === 1 ? w : 0), 0);
+    assert.ok(Math.abs(pick.resolves - uniqueWeight / 10) < 1e-12);
+  }
+  assert.ok(probes[0].resolves > answers[0].resolves);
 });
 console.log(n, 'tests passed');

@@ -27,13 +27,44 @@ export function scoreCode(guess, answer) {
     return s[0] + 3 * s[1] + 9 * s[2] + 27 * s[3] + 81 * s[4];
 }
 
-const sameColors = (a, b) => a.every((v, i) => v === b[i]);
-
 // A word stays a candidate only if every past guess would have produced
-// exactly the colors the player saw.
+// exactly the marked colors. Null leaves a tile unconstrained.
 export function filterCandidates(words, rows) {
-    if (!rows.length) return words.slice();
-    return words.filter(w => rows.every(r => sameColors(score(r.word, w), r.colors)));
+    const marked = rows.filter(r => r.colors.some(c => c !== null));
+    return words.filter(w => marked.every(r => {
+        const actual = score(r.word, w);
+        return r.colors.every((c, i) => c === null || c === actual[i]);
+    }));
+}
+
+// Find the single marked tile change that restores the most candidates.
+export function suggestTileCorrection(words, rows, { present = '', absent = '', correct = [] } = {}) {
+    const repairs = new Map();
+    wordLoop: for (const word of words) {
+        let repair;
+        for (const [row, { word: guess, colors }] of rows.entries()) {
+            if (colors.every(c => c === null)) continue;
+            const actual = score(guess, word);
+            for (let tile = 0; tile < 5; tile++) {
+                if (colors[tile] === null || colors[tile] === actual[tile]) continue;
+                if (repair) continue wordLoop;
+                repair = { row, tile, color: actual[tile] };
+            }
+        }
+        if (!repair) continue;
+        const key = `${repair.row}:${repair.tile}:${repair.color}`;
+        if (!repairs.has(key)) repairs.set(key, { ...repair, words: [] });
+        repairs.get(key).words.push(word);
+    }
+    let best = null;
+    for (const { row, tile, color, words } of repairs.values()) {
+        const edited = rows.map((r, i) => i === row
+            ? { ...r, colors: r.colors.map((c, j) => j === tile ? color : c) }
+            : r);
+        const count = quickFilter(words, present, absent, knowledge(edited).present, correct).length;
+        if (count > (best?.count ?? 0)) best = { row, tile, color, count };
+    }
+    return best;
 }
 
 // What the rows prove, for highlighting and the summary line.
@@ -42,15 +73,16 @@ export function knowledge(rows) {
     const present = new Set();
     const min = {}, exact = {};
     for (const { word, colors } of rows) {
-        const lit = {}, grayed = {};
+        const lit = {}, grayed = {}, unmarked = new Set();
         for (let i = 0; i < 5; i++) {
             const c = word[i];
             if (colors[i] === GREEN) green[i] = c;
-            if (colors[i] !== GRAY) { lit[c] = (lit[c] || 0) + 1; present.add(c); }
-            else grayed[c] = true;
+            if (colors[i] === null) unmarked.add(c);
+            else if (colors[i] === GRAY) grayed[c] = true;
+            else { lit[c] = (lit[c] || 0) + 1; present.add(c); }
         }
         for (const c in lit) min[c] = Math.max(min[c] || 0, lit[c]);
-        for (const c in grayed) exact[c] = lit[c] || 0;
+        for (const c in grayed) if (!unmarked.has(c)) exact[c] = lit[c] || 0;
     }
     return { green, present, min, exact };
 }
@@ -70,7 +102,7 @@ export function rankByFrequency(words) {
 // |pool| x |targets|, so the inner loop works on letter codes and allocates
 // nothing. `onProgress` gets a 0..1 fraction now and then (used by the worker).
 const POW3 = [1, 3, 9, 27, 81];
-function rankGuesses(pool, targets, onProgress, weights) {
+function rankGuesses(pool, targets, onProgress, weights, turnsLeft) {
     const n = targets.length;
     const W = new Float64Array(n);
     let total = 0;
@@ -102,20 +134,23 @@ function rankGuesses(pool, targets, onProgress, weights) {
         }
         // expLeft: how many words are still standing afterwards, on average.
         // groups: how many distinct color patterns this guess can show.
-        let h = 0, expLeft = 0, groups = 0;
+        let h = 0, expLeft = 0, groups = 0, resolves = 0;
         for (let k = 0; k < 243; k++) {
             if (!counts[k]) continue;
             groups++;
             const p = mass[k] / total;
             if (p > 0) h -= p * Math.log2(p);
             expLeft += p * counts[k];
+            if (counts[k] === 1) resolves += p;
         }
         // A candidate guess can win outright; give it an edge by its own odds.
         const win = share.get(word) || 0;
-        results.push({ word, bits: h, expLeft, groups, isCandidate: share.has(word), win, key: h + win });
+        results.push({ word, bits: h, expLeft, groups, resolves, isCandidate: share.has(word), win, key: h + win });
         if (onProgress && pi % 1000 === 999) onProgress(pi / pool.length);
     }
-    results.sort((a, b) => b.key - a.key);
+    results.sort(turnsLeft === 2
+        ? (a, b) => Math.round((b.resolves - a.resolves) * 1e12) || b.win - a.win || b.key - a.key
+        : (a, b) => b.key - a.key);
     return results;
 }
 
@@ -128,8 +163,13 @@ export function bestGuesses(pool, targets, top = 5, onProgress, weights) {
 // not crowd in). `probes` cannot be the answer; they spend a turn on fresh
 // letters to tell the remaining words apart, and are only returned when
 // they narrow things down better than the best answer guess does.
-export function bestSplit(pool, targets, top = 5, onProgress, weights) {
-    const ranked = rankGuesses(pool, targets, onProgress, weights);
+export function bestSplit(pool, targets, top = 5, onProgress, weights, turnsLeft) {
+    const ranked = rankGuesses(pool, targets, onProgress, weights, turnsLeft);
+    if (turnsLeft === 2) {
+        const answers = ranked.filter(r => r.isCandidate).slice(0, top);
+        const probes = ranked.filter(r => !r.isCandidate && r.resolves > (answers[0]?.resolves ?? -1) + 1e-12).slice(0, top);
+        return { answers, probes };
+    }
     const maxWin = ranked.reduce((m, r) => Math.max(m, r.win), 0);
     const answers = ranked.filter(r => r.isCandidate && r.win >= maxWin / 2).slice(0, top);
     const bar = answers.length ? answers[0].expLeft : Infinity;

@@ -12,7 +12,9 @@ Fork of [vineethtrv/wordle-helper](https://github.com/vineethtrv/wordle-helper) 
 - Color coding: purple for best guesses, blue for likely answers, slate for other valid words, and green, yellow or red counts as the list shrinks.
 - Each guess row shows how many likely answers were left after it.
 - Tap any suggested word to add it as a guess. Guesses persist in the browser until cleared.
-- **New guesses wait for Done.** A new row is marked pending until you finish coloring it, so the filter and search never run on half-entered colors. The search also waits for a short pause in tapping.
+- **Live filtering.** Every marked tile immediately updates the candidates, including on the first guess. Unmarked tiles leave the color open. Use **Rest gray** to mark the remaining tiles gray. The best-guess search waits for a short pause in tapping.
+- **Clue checks.** If no words fit, the helper highlights a tile and suggests a different color when a single change would bring candidates back.
+- **Late-game suggestions.** With two turns left, guesses are ranked by their weighted chance of isolating a single answer. The last turn suggests possible answers.
 - **Typed colors:** `crane 02100` (0 gray, 1 yellow, 2 green) or `crane bybgg` adds a guess with its colors in one step.
 - **On-screen keyboard** shows which letters are green, yellow, gray or untried, and types into the guess box.
 - **Phone layout:** the count and top picks appear right under your guesses; the Correct, Present and Absent boxes fold into a Quick filter section.

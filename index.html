@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css?v=9">
+    <link rel="stylesheet" href="styles.css?v=10">
 
     <link rel="apple-touch-icon" sizes="180x180" href="./images/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="./images/favicon-32x32.png">
@@ -40,7 +40,7 @@
         <form id="board" autocomplete="off" onsubmit="return false">
             <div class="form-group intro">
                 <h1>Find the Wordle</h1>
-                <p>Type a guess, tap its tiles until the colors match the game, then press Done. Shortcut: add the colors after the word, like <code>salet 02100</code> (0 gray, 1 yellow, 2 green).</p>
+                <p>Type a guess and tap its tiles to match the game. Results update as you tap. Use <b>Rest gray</b> when the remaining tiles are gray, or type all five colors at once like <code>salet 02100</code> (0 gray, 1 yellow, 2 green).</p>
             </div>
 
             <div class="form-group k-guess">
@@ -53,7 +53,7 @@
             </div>
 
             <div class="form-group">
-                <label>Your guesses <span>(tap a tile: gray, yellow, green)</span></label>
+                <label>Your guesses <span>(tap a tile to cycle through gray, yellow, green and unmarked)</span></label>
                 <div id="rows"></div>
                 <div id="share"></div>
                 <p id="known" class="msg"></p>
@@ -100,7 +100,7 @@
 
     <section class="about">
         <h2>How it works</h2>
-        <p>Every past guess is rescored against each word exactly the way Wordle scores it, so repeated letters come out right. A word stays on the list only if it would have produced every color you saw. The best next guess is the word whose color pattern splits the remaining words into the most even groups, weighted so classic answers count more than rare words. NYT has reused past answers since February 2026, so earlier answers stay on the list.</p>
+        <p>Each candidate is scored against your guesses using Wordle's rules, including repeated letters. It stays on the list if every marked tile matches. Early suggestions favor guesses that split up the remaining words. With two turns left, they favor guesses that can leave a single answer. Classic answers carry more weight, and past answers stay eligible.</p>
     </section>
 
     <footer>
@@ -110,6 +110,6 @@
     </footer>
 
     <!-- Bump every ?v= (here, app.js, worker.js) together on each release so browsers never mix old and new files. -->
-    <script type="module" src="./app.js?v=9"></script>
+    <script type="module" src="./app.js?v=10"></script>
 </body>
 </html>

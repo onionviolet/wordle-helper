@@ -298,6 +298,8 @@ footer a{
 .tile.gray{ background: var(--absent); }
 .tile.yellow{ background: var(--present); }
 .tile.green{ background: var(--correct); }
+.tile.unmarked{ background: transparent; border: 2px solid var(--border); color: var(--color); }
+.tile.check-color{ box-shadow: inset 0 0 0 3px #f9ba64; }
 .tile:focus-visible, .word:focus-visible{ outline: 3px solid #0694e5; outline-offset: 2px; }
 .remove{
     border: 0; background: none; color: var(--color);
@@ -361,13 +363,13 @@ header{ border-bottom: 4px solid; border-image: linear-gradient(90deg, var(--cor
 .group.win .word i.incSty{ background-color: var(--present); }
 .group.win .word i.crtSty{ background-color: var(--correct); }
 
-/* v9: pending rows, keyboard, quick filter, phone peek, share, about */
+/* Guess actions, keyboard, quick filter, phone peek, share, about */
 code{ background: #0003; padding: 1px 5px; border-radius: 4px; font-size: 0.95em; }
 .intro p{ font-size: 14px; }
-.row.pending .tile{ outline: 2px dashed #ffffff80; outline-offset: -4px; }
-.done{
+.row-actions{ display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.fill-gray{
     border: 0; background: var(--likely); color: #fff; font-weight: bold;
-    font-size: 13px; padding: 6px 10px; border-radius: 10px; cursor: pointer; margin-left: 2px;
+    font-size: 12px; padding: 4px 7px; border-radius: 10px; cursor: pointer; white-space: nowrap;
 }
 .share{ display: flex; align-items: center; gap: 12px; margin: 6px 0; }
 .share .ghost{ margin: 0; }

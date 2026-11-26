@@ -1,5 +1,5 @@
-import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=9';
-import { GRAY, GREEN, filterCandidates, knowledge, rankByFrequency, bestSplit, hardLegal, quickFilter, parseGuess } from './logic.js?v=9';
+import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=10';
+import { GRAY, GREEN, filterCandidates, suggestTileCorrection, knowledge, rankByFrequency, bestSplit, hardLegal, quickFilter, parseGuess } from './logic.js?v=10';
 
 // data.js lists every valid guess in three tiers: the 2,309 classic answers,
 // then other common words, then rare ones. NYT picks answers outside the
@@ -25,20 +25,26 @@ const KEY_ROWS = ['qwertyuiop', 'asdfghjkl', '>zxcvbnm<'];
 const $ = id => document.getElementById(id);
 const input = $('guess-input');
 const COLOR_CLASS = ['gray', 'yellow', 'green'];
+const tileColor = color => color === null ? 'unmarked' : COLOR_CLASS[color];
 const correctBoxes = [...document.querySelectorAll('#form-correct input')];
 
 let rows = load();
 let opts = loadOpts();
 let bestTimer = null, worker = null, workerBusy = false, jobId = 0, lastSig = null;
-// A row is "pending" from the moment it is added until the player presses
-// Done, so the filter never runs on colors they have not entered yet.
-const played = () => rows.filter(r => r.word && !r.pending);
-const pendingRow = () => rows.find(r => r.pending);
+let correction = null;
+const hasMarkedTile = r => r.colors.some(c => c !== null);
+const hasUnmarkedTile = r => r.colors.includes(null);
 
 function load() {
     try {
         const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
-        if (Array.isArray(saved)) return saved.filter(r => /^[a-z]{5}$/.test(r.word || '') && r.colors?.length === 5);
+        if (Array.isArray(saved)) return saved
+            .filter(r => r && /^[a-z]{5}$/.test(r.word || '') && Array.isArray(r.colors) && r.colors.length === 5)
+            .map(({ word, colors, pending }) => ({
+                word,
+                // Older pending rows defaulted to gray, even before any input.
+                colors: colors.map(c => Number.isInteger(c) && COLOR_CLASS[c] && !(pending && c === GRAY) ? c : null),
+            }));
     } catch (_) { /* storage blocked */ }
     return [];
 }
@@ -51,7 +57,7 @@ function save() {
 
 // Everything known so far: the guess rows plus the Present letter box.
 function known() {
-    const k = knowledge(played());
+    const k = knowledge(rows);
     const need = {};
     for (const c of opts.present) need[c] = (need[c] || 0) + 1;
     for (const c in need) { k.present.add(c); k.min[c] = Math.max(k.min[c] || 0, need[c]); }
@@ -63,7 +69,7 @@ function known() {
 // What the guess rows already prove, shown in the letter boxes so the two
 // ways of entering clues never disagree or need typing twice.
 function derived() {
-    const k = knowledge(played());
+    const k = knowledge(rows);
     const greens = {};
     for (const c of k.green) if (c) greens[c] = (greens[c] || 0) + 1;
     return {
@@ -80,30 +86,20 @@ function renderBoxes() {
     setValue($('input-absent'), merge(opts.absent, d.absent));
     correctBoxes.forEach((box, i) => setValue(box, opts.correct[i] || d.green[i] || ''));
 }
-const hasClues = () => played().length || opts.present || opts.absent || opts.correct.some(Boolean);
-
-// Pre-color a new guess with anything already proven, so the player
-// usually only has to tap the new information.
-function guessColors(word) {
-    const k = known();
-    return word.split('').map((c, i) => (k.green[i] === c ? GREEN : GRAY));
-}
-
-const confirmAll = () => rows.forEach(r => { delete r.pending; });
+const hasClues = () => rows.some(hasMarkedTile) || opts.present || opts.absent || opts.correct.some(Boolean);
 
 function addGuess(raw) {
     const msg = $('guess-msg');
     const text = (raw || '').trim();
     if (!text) {
-        if (pendingRow()) { confirmAll(); update(); } else msg.textContent = 'Type a 5-letter guess first.';
+        msg.textContent = 'Type a 5-letter guess first.';
         return;
     }
     const g = parseGuess(text);
     if (!g) { msg.textContent = 'Use a 5-letter word, optionally with its colors: crane 02100.'; return; }
     if (rows.length >= 6) { msg.textContent = 'Wordle allows six guesses. Remove one first.'; return; }
-    confirmAll(); // adding the next guess means the last one is finished
     msg.textContent = VALID.has(g.word) ? '' : `"${g.word.toUpperCase()}" is not in the word list, but it was added.`;
-    rows.push(g.colors ? { word: g.word, colors: g.colors } : { word: g.word, colors: guessColors(g.word), pending: true });
+    rows.push({ word: g.word, colors: g.colors ?? Array(5).fill(null) });
     input.value = '';
     update();
 }
@@ -113,9 +109,9 @@ function addGuess(raw) {
 function leftAfterEach() {
     let cur = NOT_RARE, any = ALL;
     return rows.map(r => {
-        if (!r.word || r.pending) return null;
+        if (!hasMarkedTile(r)) return null;
         cur = filterCandidates(cur, [r]); any = filterCandidates(any, [r]);
-        return cur.length ? { n: cur.length, label: 'left' } : { n: any.length, label: 'rare left' };
+        return cur.length || !any.length ? { n: cur.length, label: 'left' } : { n: any.length, label: 'rare left' };
     });
 }
 const sizeClass = n => (n <= 10 ? 'few' : n <= 100 ? 'some' : 'many');
@@ -123,11 +119,15 @@ const sizeClass = n => (n <= 10 ? 'few' : n <= 100 ? 'some' : 'many');
 function renderRows() {
     const left = leftAfterEach();
     $('rows').innerHTML = rows.map((r, ri) => `
-        <div class="row${r.pending ? ' pending' : ''}">
-            ${r.colors.map((col, i) => { const c = r.word ? r.word[i] : ''; return `<button type="button" class="tile ${COLOR_CLASS[col]}" data-r="${ri}" data-i="${i}" aria-label="${c || 'blank'} ${COLOR_CLASS[col]}">${c}</button>`; }).join('')}
-            ${r.pending
-                ? `<button type="button" class="done" data-r="${ri}">Done</button>`
-                : `<span class="left ${sizeClass(left[ri].n)}">${left[ri].n.toLocaleString()} ${left[ri].label}</span>`}
+        <div class="row">
+            ${r.colors.map((col, i) => {
+                const flagged = correction?.row === ri && correction.tile === i;
+                return `<button type="button" class="tile ${tileColor(col)}${flagged ? ' check-color' : ''}" data-r="${ri}" data-i="${i}" aria-label="${r.word[i].toUpperCase()}, tile ${i + 1}, ${tileColor(col)}${flagged ? `, check if ${tileColor(correction.color)}` : ''}">${r.word[i]}</button>`;
+            }).join('')}
+            <div class="row-actions">
+                ${left[ri] ? `<span class="left ${sizeClass(left[ri].n)}">${left[ri].n.toLocaleString()} ${left[ri].label}</span>` : ''}
+                ${hasUnmarkedTile(r) ? `<button type="button" class="fill-gray" data-r="${ri}">Rest gray</button>` : ''}
+            </div>
             <button type="button" class="remove" data-r="${ri}" aria-label="Remove guess">×</button>
         </div>`).join('');
     renderShare();
@@ -135,19 +135,15 @@ function renderRows() {
 
 // Once a confirmed row is all green, offer the usual emoji grid to copy.
 function renderShare() {
-    const done = played();
-    const solved = done.length && done[done.length - 1].colors.every(c => c === GREEN);
+    const solved = rows.length && !rows.some(hasUnmarkedTile) && rows.at(-1).colors.every(c => c === GREEN);
     $('share').innerHTML = solved
-        ? `<div class="share"><b>Solved in ${done.length}/6</b><button type="button" id="copy" class="ghost">Copy result</button></div>`
+        ? `<div class="share"><b>Solved in ${rows.length}/6</b><button type="button" id="copy" class="ghost">Copy result</button></div>`
         : '';
 }
-const shareText = () => {
-    const done = played();
-    return `Wordle ${done.length}/6\n\n` + done.map(r => r.colors.map(c => ['⬛', '🟨', '🟩'][c]).join('')).join('\n');
-};
+const shareText = () => `Wordle ${rows.length}/6\n\n` + rows.map(r => r.colors.map(c => ['⬛', '🟨', '🟩'][c]).join('')).join('\n');
 
 function renderKnown() {
-    const k = knowledge(played());
+    const k = knowledge(rows);
     const bits = [];
     for (const c of Object.keys(k.min).sort()) {
         if (k.exact[c] !== undefined) bits.push(`exactly ${k.exact[c]} ${c.toUpperCase()}`);
@@ -155,10 +151,7 @@ function renderKnown() {
     }
     const absent = Object.keys(k.exact).filter(c => k.exact[c] === 0).sort();
     if (absent.length) bits.push(`no ${absent.join(' ').toUpperCase()}`);
-    const p = pendingRow();
-    $('known').textContent = p
-        ? `Tap the tiles of ${p.word.toUpperCase()} to match the game, then press Done.`
-        : bits.length ? `Known: ${bits.join(', ')}.` : '';
+    $('known').textContent = bits.length ? `Known: ${bits.join(', ')}.` : '';
 }
 
 // On-screen keyboard: shows each letter's state and types into the guess box.
@@ -183,18 +176,19 @@ function wordHtml(w, k) {
 
 // Compact count and top picks shown right under the guesses on narrow
 // screens, where the full results panel sits below the form.
-function setPeek(html) { $('peek').innerHTML = html ? `${html}<a href="#side" class="msg">Full list below</a>` : ''; }
+function setPeek(html, link = true) { $('peek').innerHTML = html ? html + (link ? '<a href="#side" class="msg">Full list below</a>' : '') : ''; }
 let peekCount = '';
 
 function renderResults() {
-    const sig = JSON.stringify([played(), opts.present, opts.absent, opts.correct, opts.hard, opts.hide]);
-    if (sig === lastSig) return; // tile taps on a pending row change nothing here
+    const sig = JSON.stringify([rows, opts]);
+    if (sig === lastSig) return;
     lastSig = sig;
 
     const k = known();
     cancelBest();
     $('best').innerHTML = '';
     peekCount = '';
+    correction = null;
 
     if (!hasClues()) {
         $('summary').innerHTML = `<h2 class="h-best">Strong first guesses</h2><p>${ALL.length.toLocaleString()} valid words: <b class="c-likely">${ANSWER_COUNT.toLocaleString()}</b> classic answers, <b class="c-common">${COMMON_COUNT.toLocaleString()}</b> other common words, the rest rare.</p>`;
@@ -203,11 +197,15 @@ function renderResults() {
         return;
     }
 
-    const cands = quickFilter(filterCandidates(ALL, played()), opts.present, opts.absent, knowledge(played()).present, opts.correct);
+    const cands = quickFilter(filterCandidates(ALL, rows), opts.present, opts.absent, knowledge(rows).present, opts.correct);
     if (!cands.length) {
-        $('summary').innerHTML = '<h2>No words match</h2><p>Check the tile colors. A gray tile next to a yellow or green of the same letter means "no more copies of that letter".</p>';
+        correction = suggestTileCorrection(ALL, rows, opts);
+        const clue = correction
+            ? `Check tile ${correction.tile + 1} in ${rows[correction.row].word.toUpperCase()}. If it was ${tileColor(correction.color)}, ${correction.count.toLocaleString()} ${correction.count === 1 ? 'word fits' : 'words fit'}.`
+            : 'Double-check the tile colors and any clues you typed into Quick filter.';
+        $('summary').innerHTML = `<h2>No words match</h2><p>${clue}</p>`;
         $('results').innerHTML = '';
-        setPeek('<p><b>No words match.</b> Check the tile colors.</p>');
+        setPeek(`<p><b>No words match.</b> ${clue}</p>`, false);
         return;
     }
 
@@ -240,11 +238,19 @@ function renderResults() {
     }
     $('results').innerHTML = html;
 
-    // Best next guess: weighted entropy over every word still standing.
+    const turnsLeft = 6 - rows.length;
+    if (turnsLeft === 1) {
+        const picks = cands.slice().sort((a, b) => weight(b) - weight(a)).slice(0, 5);
+        const html = `<h3 class="h-win">Last turn: guess a possible answer</h3><div class="group win">${picks.map(w => wordHtml(w, k)).join('')}</div>`;
+        $('best').innerHTML = html;
+        setPeek(peekCount + html);
+        return;
+    }
+
     // Rare words are only dropped while the list is too long to search fast.
     const notRare = [...likely, ...common];
-    const targets = cands.length <= BEST_MAX_TARGETS || !notRare.length ? [...notRare, ...rare] : notRare;
-    if (targets.length > 2 && played().length < 6) requestBest(targets, k);
+    const targets = turnsLeft === 2 || cands.length <= BEST_MAX_TARGETS || !notRare.length ? [...notRare, ...rare] : notRare;
+    if (turnsLeft === 2 || (turnsLeft > 2 && targets.length > 2)) requestBest(targets, k, turnsLeft);
     else setPeek(peekCount + (cands.length <= 2 && !opts.hide ? `<div class="group win">${cands.map(w => wordHtml(w, k)).join('')}</div>` : ''));
 }
 
@@ -255,7 +261,7 @@ function cancelBest() {
 }
 
 // Ranks every valid word (or every hard-mode-legal word) in a worker.
-function requestBest(targets, k) {
+function requestBest(targets, k, turnsLeft) {
     const id = jobId;
     const weights = targets.map(weight);
     const pool = opts.hard ? ALL.filter(w => hardLegal(w, k)) : null;
@@ -264,6 +270,15 @@ function requestBest(targets, k) {
     const item = (b, note) => `<span class="best-item">${wordHtml(b.word, k)}<small>${note}</small><small>${b.groups} groups · ~${b.expLeft.toFixed(1)} left</small></span>`;
     const show = ({ answers, probes }) => {
         if (id !== jobId) return;
+        if (turnsLeft === 2) {
+            const picks = [...probes, ...answers].slice(0, 5);
+            const html = `<h3 class="h-best">Two turns left</h3><div class="group best">${picks.map(b =>
+                item(b, `<em>${(100 * b.resolves).toFixed(1)}% to pin down the answer</em> · ${b.isCandidate ? 'possible answer' : 'narrowing guess'}`)
+            ).join('')}</div>`;
+            $('best').innerHTML = html;
+            setPeek(peekCount + html);
+            return;
+        }
         const mode = opts.hard ? 'hard mode, ' : '';
         let html = '';
         if (answers.length) html += `<h3 class="h-win">Best guess that could be the answer <span>(${mode}chance it is right, then how it splits the rest)</span></h3>
@@ -275,11 +290,15 @@ function requestBest(targets, k) {
         const top = [...answers.slice(0, 3), ...probes.slice(0, 2)];
         setPeek(peekCount + (top.length ? `<div class="group win">${top.map(b => item(b, b.isCandidate ? `<em>${Math.max(1, Math.round(b.win * 100))}% to win</em>` : 'cannot win')).join('')}</div>` : ''));
     };
+    if (targets.length <= 2) {
+        show(bestSplit(targets, targets, 5, null, weights, turnsLeft));
+        return;
+    }
     const inline = () => {
         workerBusy = false; worker = null;
         if (id !== jobId) return;
         if (targets.length > BEST_MAX_INLINE) { $('best').innerHTML = ''; setPeek(peekCount); return; }
-        bestTimer = setTimeout(() => show(bestSplit(pool || ALL, targets, 5, null, weights)), 30);
+        bestTimer = setTimeout(() => show(bestSplit(pool || ALL, targets, 5, null, weights, turnsLeft)), 30);
     };
     const working = pct => {
         const t = `<p class="msg">Working out the best next guess...${pct == null ? '' : ` ${pct}%`}</p>`;
@@ -290,7 +309,7 @@ function requestBest(targets, k) {
     bestTimer = setTimeout(() => {
         if (id !== jobId) return;
         try {
-            if (!worker) worker = new Worker('./worker.js?v=9', { type: 'module' });
+            if (!worker) worker = new Worker('./worker.js?v=10', { type: 'module' });
             workerBusy = true;
             worker.onmessage = e => {
                 if (e.data.id !== id || id !== jobId) return;
@@ -298,7 +317,7 @@ function requestBest(targets, k) {
                 else working(Math.round(e.data.progress * 100));
             };
             worker.onerror = e => { e.preventDefault(); inline(); };
-            worker.postMessage({ id, targets, weights, pool, top: 5 });
+            worker.postMessage({ id, targets, weights, pool, top: 5, turnsLeft });
         } catch (_) { inline(); }
     }, BEST_DELAY);
 }
@@ -306,10 +325,10 @@ function requestBest(targets, k) {
 function update() {
     save();
     renderBoxes();
-    renderRows();
     renderKnown();
     renderKeys();
     renderResults();
+    renderRows();
 }
 
 input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addGuess(input.value); } });
@@ -358,10 +377,15 @@ $('rows').addEventListener('click', e => {
     const t = e.target.closest('button');
     if (!t) return;
     const r = +t.dataset.r;
+    const i = t.dataset.i;
     if (t.classList.contains('remove')) rows.splice(r, 1);
-    else if (t.classList.contains('done')) delete rows[r].pending;
-    else { const i = +t.dataset.i; rows[r].colors[i] = (rows[r].colors[i] + 1) % 3; }
+    else if (t.classList.contains('fill-gray')) rows[r].colors = rows[r].colors.map(c => c ?? GRAY);
+    else {
+        const color = rows[r].colors[i];
+        rows[r].colors[i] = color === GREEN ? null : (color ?? -1) + 1;
+    }
     update();
+    if (i !== undefined) $('rows').querySelector(`[data-r="${r}"][data-i="${i}"]`)?.focus({ preventScroll: true });
 });
 
 $('share').addEventListener('click', async e => {
