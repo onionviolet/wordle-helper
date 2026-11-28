@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css?v=10">
+    <link rel="stylesheet" href="styles.css?v=11">
 
     <link rel="apple-touch-icon" sizes="180x180" href="./images/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="./images/favicon-32x32.png">
@@ -40,7 +40,7 @@
         <form id="board" autocomplete="off" onsubmit="return false">
             <div class="form-group intro">
                 <h1>Find the Wordle</h1>
-                <p>Type a guess and tap its tiles to match the game. Results update as you tap. Use <b>Rest gray</b> when the remaining tiles are gray, or type all five colors at once like <code>salet 02100</code> (0 gray, 1 yellow, 2 green).</p>
+                <p>New guesses start with five gray tiles. Tap once for yellow, twice for green, or a third time to return to gray. Results update as you tap. You can also enter all five colors like <code>salet 02100</code> (0 gray, 1 yellow, 2 green).</p>
             </div>
 
             <div class="form-group k-guess">
@@ -53,7 +53,7 @@
             </div>
 
             <div class="form-group">
-                <label>Your guesses <span>(tap a tile to cycle through gray, yellow, green and unmarked)</span></label>
+                <label>Your guesses <span>(tap only the letters that showed yellow or green)</span></label>
                 <div id="rows"></div>
                 <div id="share"></div>
                 <p id="known" class="msg"></p>
@@ -110,6 +110,6 @@
     </footer>
 
     <!-- Bump every ?v= (here, app.js, worker.js) together on each release so browsers never mix old and new files. -->
-    <script type="module" src="./app.js?v=10"></script>
+    <script type="module" src="./app.js?v=11"></script>
 </body>
 </html>

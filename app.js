@@ -1,5 +1,5 @@
-import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=10';
-import { GRAY, GREEN, filterCandidates, suggestTileCorrection, knowledge, rankByFrequency, bestSplit, hardLegal, quickFilter, parseGuess } from './logic.js?v=10';
+import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=11';
+import { GRAY, GREEN, filterCandidates, suggestTileCorrection, knowledge, rankByFrequency, bestSplit, hardLegal, quickFilter, parseGuess } from './logic.js?v=11';
 
 // data.js lists every valid guess in three tiers: the 2,309 classic answers,
 // then other common words, then rare ones. NYT picks answers outside the
@@ -99,7 +99,7 @@ function addGuess(raw) {
     if (!g) { msg.textContent = 'Use a 5-letter word, optionally with its colors: crane 02100.'; return; }
     if (rows.length >= 6) { msg.textContent = 'Wordle allows six guesses. Remove one first.'; return; }
     msg.textContent = VALID.has(g.word) ? '' : `"${g.word.toUpperCase()}" is not in the word list, but it was added.`;
-    rows.push({ word: g.word, colors: g.colors ?? Array(5).fill(null) });
+    rows.push({ word: g.word, colors: g.colors ?? Array(5).fill(GRAY) });
     input.value = '';
     update();
 }
@@ -309,7 +309,7 @@ function requestBest(targets, k, turnsLeft) {
     bestTimer = setTimeout(() => {
         if (id !== jobId) return;
         try {
-            if (!worker) worker = new Worker('./worker.js?v=10', { type: 'module' });
+            if (!worker) worker = new Worker('./worker.js?v=11', { type: 'module' });
             workerBusy = true;
             worker.onmessage = e => {
                 if (e.data.id !== id || id !== jobId) return;
@@ -382,7 +382,7 @@ $('rows').addEventListener('click', e => {
     else if (t.classList.contains('fill-gray')) rows[r].colors = rows[r].colors.map(c => c ?? GRAY);
     else {
         const color = rows[r].colors[i];
-        rows[r].colors[i] = color === GREEN ? null : (color ?? -1) + 1;
+        rows[r].colors[i] = color === GREEN ? GRAY : (color ?? -1) + 1;
     }
     update();
     if (i !== undefined) $('rows').querySelector(`[data-r="${r}"][data-i="${i}"]`)?.focus({ preventScroll: true });
