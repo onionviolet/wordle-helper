@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css?v=11">
+    <link rel="stylesheet" href="styles.css?v=12">
 
     <link rel="apple-touch-icon" sizes="180x180" href="./images/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="./images/favicon-32x32.png">
@@ -72,22 +72,25 @@
                     <div class="form-flex" id="form-correct">
                         <input id="correct-0" maxlength="1" aria-label="Letter 1"><input maxlength="1" aria-label="Letter 2"><input maxlength="1" aria-label="Letter 3"><input maxlength="1" aria-label="Letter 4"><input maxlength="1" aria-label="Letter 5">
                     </div>
+                    <p class="msg clue-sources" id="from-correct"></p>
                 </div>
                 <div class="k-present">
                     <label for="input-present">Present <span>(in the word, spot unknown)</span></label>
                     <input id="input-present" placeholder="Type present letters...">
+                    <p class="msg clue-sources" id="from-present"></p>
                 </div>
                 <div class="k-absent">
                     <label for="input-absent">Absent <span>(not in the word)</span></label>
                     <input id="input-absent" placeholder="Type excluded letters...">
+                    <p class="msg clue-sources" id="from-absent"></p>
                 </div>
-                <p class="msg">These fill in from your guesses. Letters you type here are added on top.</p>
             </details>
 
             <div class="form-group">
                 <label class="check"><input type="checkbox" id="opt-hard"> Hard mode <span>(only suggest guesses that reuse every clue)</span></label>
                 <label class="check"><input type="checkbox" id="opt-hide"> Hints only <span>(hide the word list, keep the count and best guess)</span></label>
                 <button type="button" id="clear" class="ghost">Clear all</button>
+                <button type="button" id="undo-clear" class="ghost" hidden>Undo clear</button>
             </div>
         </form>
 
@@ -110,6 +113,6 @@
     </footer>
 
     <!-- Bump every ?v= (here, app.js, worker.js) together on each release so browsers never mix old and new files. -->
-    <script type="module" src="./app.js?v=11"></script>
+    <script type="module" src="./app.js?v=12"></script>
 </body>
 </html>

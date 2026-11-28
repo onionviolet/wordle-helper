@@ -415,3 +415,7 @@ code{ background: #0003; padding: 1px 5px; border-radius: 4px; font-size: 0.95em
     input{ color: #fff; }
     .about p{ color: #555; }
 }
+
+.clue-sources a { color: inherit; display: inline-block; padding: 3px 1px; }
+.tile:focus { outline: 3px solid #0694e5; outline-offset: 2px; }
+#clear:disabled { opacity: .5; }

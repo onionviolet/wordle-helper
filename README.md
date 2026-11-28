@@ -8,12 +8,12 @@ Fork of [vineethtrv/wordle-helper](https://github.com/vineethtrv/wordle-helper) 
 - **Best next guess, always on:** after every guess it ranks every valid word by how well it splits the words still standing, weighted so classic answers count most, common words less and rare words a little. Suggestions come in two rows: guesses that could be the answer (with the chance each is right) and narrowing guesses that cannot win but split the rest fastest. It runs in a web worker.
 - **Hard mode** toggle: only suggests guesses that keep every green and reuse every revealed letter.
 - **Hints only** toggle: hides the word list and keeps the count and best guess, for help without the answer.
-- **Correct, Present and Absent boxes** from the original sit at the top for a quick filter without entering whole guesses. They fill in from the guess rows as you color tiles, and letters you type yourself are added on top.
+- **Correct, Present and Absent boxes** from the original sit at the top for a quick filter without entering whole guesses. Type manual clues in the fields. Under each field, letters from guesses link to their source tiles.
 - Color coding: purple for best guesses, blue for likely answers, slate for other valid words, and green, yellow or red counts as the list shrinks.
 - Each guess row shows how many likely answers were left after it.
-- Tap any suggested word to add it as a guess. Guesses persist in the browser until cleared.
+- Tap any suggested word to add it as a guess. Guesses persist in the browser until cleared. Undo clear restores the last board and its manual clues until the next edit.
 - **Live filtering.** New guesses start all gray and filter the candidates immediately. Tap a tile once for yellow, twice for green, and again to return to gray. The best-guess search waits for a short pause in tapping.
-- **Clue checks.** If no words fit, the helper highlights a tile and suggests a different color when a single change would bring candidates back.
+- **Clue checks.** If no words fit after a short pause, the helper highlights a tile and suggests a different color when a single change would bring candidates back.
 - **Late-game suggestions.** With two turns left, guesses are ranked by their weighted chance of isolating a single answer. The last turn suggests possible answers.
 - **Typed colors:** `crane 02100` (0 gray, 1 yellow, 2 green) or `crane bybgg` adds a guess with its colors in one step.
 - **On-screen keyboard** shows which letters are green, yellow, gray or untried, and types into the guess box.

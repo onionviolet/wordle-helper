@@ -1,7 +1,7 @@
 // Runs the best-next-guess search off the main thread so the page stays
 // responsive even with thousands of words still in play.
-import { COLLECTION } from './data.js?v=11';
-import { bestSplit } from './logic.js?v=11';
+import { COLLECTION } from './data.js?v=12';
+import { bestSplit } from './logic.js?v=12';
 
 onmessage = e => {
     const { id, targets, weights, pool, top, turnsLeft } = e.data;

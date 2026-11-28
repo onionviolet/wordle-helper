@@ -1,5 +1,5 @@
-import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=11';
-import { GRAY, GREEN, filterCandidates, suggestTileCorrection, knowledge, rankByFrequency, bestSplit, hardLegal, quickFilter, parseGuess } from './logic.js?v=11';
+import { COLLECTION, ANSWER_COUNT, COMMON_COUNT } from './data.js?v=12';
+import { GRAY, YELLOW, GREEN, filterCandidates, suggestTileCorrection, knowledge, rankByFrequency, bestSplit, hardLegal, quickFilter, parseGuess } from './logic.js?v=12';
 
 // data.js lists every valid guess in three tiers: the 2,309 classic answers,
 // then other common words, then rare ones. NYT picks answers outside the
@@ -31,7 +31,8 @@ const correctBoxes = [...document.querySelectorAll('#form-correct input')];
 let rows = load();
 let opts = loadOpts();
 let bestTimer = null, worker = null, workerBusy = false, jobId = 0, lastSig = null;
-let correction = null;
+let correctionTimer;
+let clearedBoard = null;
 const hasMarkedTile = r => r.colors.some(c => c !== null);
 const hasUnmarkedTile = r => r.colors.includes(null);
 
@@ -66,25 +67,28 @@ function known() {
     for (const c in fixed) k.min[c] = Math.max(k.min[c] || 0, fixed[c]);
     return k;
 }
-// What the guess rows already prove, shown in the letter boxes so the two
-// ways of entering clues never disagree or need typing twice.
-function derived() {
-    const k = knowledge(rows);
-    const greens = {};
-    for (const c of k.green) if (c) greens[c] = (greens[c] || 0) + 1;
-    return {
-        green: k.green,
-        present: Object.keys(k.min).filter(c => k.min[c] > (greens[c] || 0)).join(''),
-        absent: Object.keys(k.exact).filter(c => k.exact[c] === 0).join(''),
-    };
-}
-const merge = (manual, extra) => manual + [...extra].filter(c => !manual.includes(c)).join('');
 const setValue = (box, v) => { if (box.value.toLowerCase() !== v) box.value = v; };
 function renderBoxes() {
-    const d = derived();
-    setValue($('input-present'), merge(opts.present, d.present));
-    setValue($('input-absent'), merge(opts.absent, d.absent));
-    correctBoxes.forEach((box, i) => setValue(box, opts.correct[i] || d.green[i] || ''));
+    setValue($('input-present'), opts.present);
+    setValue($('input-absent'), opts.absent);
+    correctBoxes.forEach((box, i) => setValue(box, opts.correct[i] || ''));
+
+    const sources = { correct: new Map(), present: new Map(), absent: new Map() };
+    rows.forEach((row, ri) => {
+        const { exact } = knowledge([row]);
+        row.colors.forEach((color, i) => {
+            const letter = row.word[i];
+            let group, label = letter.toUpperCase();
+            if (color === GREEN) { group = 'correct'; label += ` in spot ${i + 1}`; }
+            else if (color === YELLOW) group = 'present';
+            else if (color === GRAY && exact[letter] === 0) group = 'absent';
+            else return;
+            if (!sources[group].has(label)) sources[group].set(label,
+                `<a href="#tile-${ri}-${i}" aria-label="${label}, guess ${ri + 1}, ${row.word.toUpperCase()}, tile ${i + 1}">${label}</a>`);
+        });
+    });
+    for (const [group, links] of Object.entries(sources))
+        $(`from-${group}`).innerHTML = links.size ? 'From guesses: ' + [...links.values()].join(' · ') : '';
 }
 const hasClues = () => rows.some(hasMarkedTile) || opts.present || opts.absent || opts.correct.some(Boolean);
 
@@ -121,8 +125,7 @@ function renderRows() {
     $('rows').innerHTML = rows.map((r, ri) => `
         <div class="row">
             ${r.colors.map((col, i) => {
-                const flagged = correction?.row === ri && correction.tile === i;
-                return `<button type="button" class="tile ${tileColor(col)}${flagged ? ' check-color' : ''}" data-r="${ri}" data-i="${i}" aria-label="${r.word[i].toUpperCase()}, tile ${i + 1}, ${tileColor(col)}${flagged ? `, check if ${tileColor(correction.color)}` : ''}">${r.word[i]}</button>`;
+                return `<button type="button" id="tile-${ri}-${i}" class="tile ${tileColor(col)}" data-r="${ri}" data-i="${i}" aria-label="${r.word[i].toUpperCase()}, tile ${i + 1}, ${tileColor(col)}">${r.word[i]}</button>`;
             }).join('')}
             <div class="row-actions">
                 ${left[ri] ? `<span class="left ${sizeClass(left[ri].n)}">${left[ri].n.toLocaleString()} ${left[ri].label}</span>` : ''}
@@ -157,8 +160,7 @@ function renderKnown() {
 // On-screen keyboard: shows each letter's state and types into the guess box.
 function renderKeys() {
     const k = known();
-    const d = derived();
-    const out = new Set([...d.absent, ...opts.absent].filter(c => !k.present.has(c)));
+    const out = new Set([...Object.keys(k.exact).filter(c => k.exact[c] === 0), ...opts.absent]);
     const state = c => (k.green.includes(c) ? 'green' : k.present.has(c) ? 'yellow' : out.has(c) ? 'gray' : '');
     $('keys').innerHTML = KEY_ROWS.map(r => `<div class="krow">${[...r].map(c =>
         c === '>' ? '<button type="button" class="key wide" data-k="enter">Enter</button>'
@@ -188,7 +190,7 @@ function renderResults() {
     cancelBest();
     $('best').innerHTML = '';
     peekCount = '';
-    correction = null;
+    clearTimeout(correctionTimer);
 
     if (!hasClues()) {
         $('summary').innerHTML = `<h2 class="h-best">Strong first guesses</h2><p>${ALL.length.toLocaleString()} valid words: <b class="c-likely">${ANSWER_COUNT.toLocaleString()}</b> classic answers, <b class="c-common">${COMMON_COUNT.toLocaleString()}</b> other common words, the rest rare.</p>`;
@@ -199,13 +201,22 @@ function renderResults() {
 
     const cands = quickFilter(filterCandidates(ALL, rows), opts.present, opts.absent, knowledge(rows).present, opts.correct);
     if (!cands.length) {
-        correction = suggestTileCorrection(ALL, rows, opts);
-        const clue = correction
-            ? `Check tile ${correction.tile + 1} in ${rows[correction.row].word.toUpperCase()}. If it was ${tileColor(correction.color)}, ${correction.count.toLocaleString()} ${correction.count === 1 ? 'word fits' : 'words fit'}.`
-            : 'Double-check the tile colors and any clues you typed into Quick filter.';
-        $('summary').innerHTML = `<h2>No words match</h2><p>${clue}</p>`;
+        $('summary').innerHTML = '<h2>0 possible words</h2>';
         $('results').innerHTML = '';
-        setPeek(`<p><b>No words match.</b> ${clue}</p>`, false);
+        setPeek('<p><b>0 possible words</b></p>', false);
+        correctionTimer = setTimeout(() => {
+            const correction = suggestTileCorrection(ALL, rows, opts);
+            const clue = correction
+                ? `Check tile ${correction.tile + 1} in ${rows[correction.row].word.toUpperCase()}. If it was ${tileColor(correction.color)}, ${correction.count.toLocaleString()} ${correction.count === 1 ? 'word fits' : 'words fit'}.`
+                : 'Double-check the tile colors and any clues you typed into Quick filter.';
+            $('summary').innerHTML = `<h2>No words match</h2><p>${clue}</p>`;
+            setPeek(`<p><b>No words match.</b> ${clue}</p>`, false);
+            if (correction) {
+                const tile = $(`tile-${correction.row}-${correction.tile}`);
+                tile.classList.add('check-color');
+                tile.setAttribute('aria-label', tile.getAttribute('aria-label') + `, check if ${tileColor(correction.color)}`);
+            }
+        }, 650);
         return;
     }
 
@@ -309,7 +320,7 @@ function requestBest(targets, k, turnsLeft) {
     bestTimer = setTimeout(() => {
         if (id !== jobId) return;
         try {
-            if (!worker) worker = new Worker('./worker.js?v=11', { type: 'module' });
+            if (!worker) worker = new Worker('./worker.js?v=12', { type: 'module' });
             workerBusy = true;
             worker.onmessage = e => {
                 if (e.data.id !== id || id !== jobId) return;
@@ -322,7 +333,10 @@ function requestBest(targets, k, turnsLeft) {
     }, BEST_DELAY);
 }
 
-function update() {
+function update(keepUndo = false) {
+    if (!keepUndo) clearedBoard = null;
+    $('undo-clear').hidden = !clearedBoard;
+    $('clear').disabled = !rows.length && !opts.present && !opts.absent && !opts.correct.some(Boolean);
     save();
     renderBoxes();
     renderKnown();
@@ -332,7 +346,11 @@ function update() {
 }
 
 input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addGuess(input.value); } });
-input.addEventListener('input', () => { input.value = input.value.replace(/[^a-zA-Z0-9 .\-]/g, '').slice(0, 11); });
+function dismissUndo() {
+    clearedBoard = null;
+    $('undo-clear').hidden = true;
+}
+input.addEventListener('input', () => { dismissUndo(); input.value = input.value.replace(/[^a-zA-Z0-9 .\-]/g, '').slice(0, 11); });
 $('add-guess').addEventListener('click', () => addGuess(input.value));
 // Typed letters are kept apart from the ones the guess rows supply, so
 // removing a guess also removes its letters from the boxes.
@@ -340,8 +358,7 @@ for (const key of ['present', 'absent']) {
     const box = $('input-' + key);
     box.addEventListener('input', () => {
         const typed = [...new Set(box.value.toLowerCase().replace(/[^a-z]/g, ''))];
-        const fromRows = derived()[key];
-        opts[key] = typed.filter(c => !fromRows.includes(c)).join('');
+        opts[key] = typed.join('');
         update();
     });
 }
@@ -349,7 +366,7 @@ for (const key of ['present', 'absent']) {
 correctBoxes.forEach((box, i) => {
     box.addEventListener('input', () => {
         const c = box.value.replace(/[^a-zA-Z]/g, '').slice(-1).toLowerCase();
-        opts.correct[i] = c === derived().green[i] ? '' : c;
+        opts.correct[i] = c;
         if (c && correctBoxes[i + 1]) correctBoxes[i + 1].focus();
         update();
     });
@@ -369,8 +386,18 @@ for (const key of ['hard', 'hide']) {
 }
 
 $('clear').addEventListener('click', () => {
+    clearedBoard = { rows, present: opts.present, absent: opts.absent, correct: opts.correct };
     rows = []; opts.present = opts.absent = ''; opts.correct = ['', '', '', '', ''];
-    $('guess-msg').textContent = ''; update();
+    $('guess-msg').textContent = ''; update(true);
+    $('undo-clear').focus();
+});
+$('undo-clear').addEventListener('click', () => {
+    if (!clearedBoard) return;
+    const { rows: restored, ...clues } = clearedBoard;
+    rows = restored;
+    Object.assign(opts, clues);
+    update();
+    $('clear').focus();
 });
 
 $('rows').addEventListener('click', e => {
@@ -398,6 +425,7 @@ $('keys').addEventListener('click', e => {
     const b = e.target.closest('.key');
     if (!b) return;
     const k = b.dataset.k;
+    if (k !== 'enter') dismissUndo();
     if (k === 'enter') addGuess(input.value);
     else if (k === 'back') input.value = input.value.slice(0, -1);
     else if (input.value.replace(/[^a-z]/gi, '').length < 5 && !/\d/.test(input.value)) input.value += k;
